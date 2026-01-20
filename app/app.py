@@ -20,7 +20,7 @@ DB_PATH = os.path.join(os.path.dirname(__file__), 'reservations.db')
 
 # Admin credentials (from environment or defaults)
 DEMO_EMAIL = os.environ.get('ADMIN_EMAIL', 'dar.duminski@gmail.com')
-DEMO_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'temp_pass2912!')
+DEMO_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'pass_2912')
 
 
 def get_db():
