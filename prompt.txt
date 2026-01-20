@@ -1,0 +1,141 @@
+markdown# Guest Check-in & Invoice Collection System - Full-Stack Demo
+
+## Role & Context
+You are a senior full-stack engineer. This is a functional demo focused on correct data flow and behavior rather than production-grade security or polish. The application must run locally immediately after setup.
+
+## Step 1: Repository Scan
+Scan the current working directory for any existing product descriptions, requirements, or documentation. Incorporate relevant details into the implementation.
+
+## Step 2: Architecture Overview
+Build a minimal full-stack application with:
+- **Backend**: Flask or Node/Express (your choice based on repo context)
+- **Database**: SQLite (local, no external dependencies)
+- **Two separate frontends**: Admin dashboard + Guest-facing form
+- Keep architecture simple, explicit, and traceable
+
+## Step 3: Database Schema & Seeding
+
+Create and initialize SQLite database with this schema:
+
+**reservations** table:
+| Field | Type | Notes |
+|-------|------|-------|
+| id | INTEGER | Primary key, auto-increment |
+| reservation_number | TEXT | Unique (e.g., "DEMO-123") |
+| apartment_number | TEXT | e.g., "APT-4B" |
+| access_code | TEXT | Pre-assigned door/lockbox code |
+| checkin_date | DATE | |
+| checkout_date | DATE | |
+| guest_name | TEXT | Nullable - filled by guest |
+| guest_email | TEXT | Nullable - filled by guest |
+| guest_phone | TEXT | Nullable - filled by guest |
+| guest_address | TEXT | Nullable - filled by guest |
+| guest_company | TEXT | Nullable, optional |
+| guest_tax_id | TEXT | Nullable, optional (VAT/NIP) |
+| guest_submitted_at | TIMESTAMP | Nullable - set on form submission |
+| created_at | TIMESTAMP | Auto-set |
+| updated_at | TIMESTAMP | Auto-update |
+
+**Seed data** (pre-populate so demo works immediately):
+```python
+{
+    "reservation_number": "DEMO-123",
+    "apartment_number": "APT-4B",
+    "access_code": "4521#",
+    "checkin_date": "2025-01-25",
+    "checkout_date": "2025-01-28"
+}
+# Add 2-3 more sample reservations with varying data
+```
+
+## Step 4: Admin Dashboard (Internal Interface)
+
+**Authentication**: Demo-only, hardcoded credentials:
+- Email: `dar.duminski@gmail.com`
+- Password: `temp_pass2912!`
+- No OAuth, password hashing, or external auth services required
+- Simple session/cookie-based login is sufficient
+
+**Dashboard features**:
+- Login page with email/password form
+- After login: Table view of all reservations showing:
+  - Reservation number
+  - Apartment number  
+  - Check-in / Check-out dates
+  - Access code
+  - Guest submission status (✓ submitted / ⏳ pending)
+  - Guest details (if submitted)
+  - Copyable guest link for each reservation
+- Professional, clean styling (basic CSS, no framework required)
+- Logout functionality
+
+## Step 5: Guest Form (External Interface)
+
+**Access method**: Personal URL with reservation identifier
+- Route: `/guest?reservation=DEMO-123` or `/guest/DEMO-123`
+- No authentication required
+
+**Form behavior**:
+1. On page load: Fetch reservation data from database using URL parameter
+2. Display as **read-only, pre-filled fields**:
+   - Reservation number
+   - Apartment number
+   - Check-in date
+   - Check-out date
+3. Editable fields for guest to complete:
+   - Full name (required)
+   - Email (required)
+   - Phone (required)
+   - Address (required)
+   - Company name (optional)
+   - Tax ID / VAT / NIP (optional)
+
+**Submission flow**:
+1. Validate required fields
+2. Save guest data to correct reservation record (matched by reservation_number)
+3. Set `guest_submitted_at` timestamp
+4. **UI transitions to success state**:
+   - Hide the form
+   - Display confirmation message
+   - **Prominently reveal the apartment access code**
+   - Show check-in details summary
+
+**Error handling**:
+- Invalid/missing reservation ID → friendly error message
+- Already submitted → show access code directly (or message)
+
+## Step 6: Data Flow Verification
+Ensure complete traceability:
+1. Admin sees pending reservation → copies guest link
+2. Guest opens link → sees pre-filled data → submits details
+3. Database updates with guest info + timestamp
+4. Guest sees access code on success screen
+5. Admin dashboard reflects updated status and guest details
+
+## Technical Constraints
+- ✅ SQLite (no external DB setup)
+- ✅ Vanilla HTML/CSS/JS (minimal frameworks)
+- ✅ Hardcoded demo credentials
+- ✅ Local execution only
+- ❌ No OAuth/external auth
+- ❌ No production security measures
+- ❌ No unnecessary abstractions
+
+## Deliverables
+
+1. **Working application** - Both interfaces functional end-to-end
+2. **Pre-seeded database** - Demo works immediately on first run
+3. **File/folder structure** - Document what you created and why
+4. **Run instructions** - Clear steps to start the app locally
+5. **Assumptions documented** - Note any decisions or interpretations made
+6. **Test URLs** - Provide ready-to-use links for testing:
+   - Admin login: `http://localhost:PORT/admin`
+   - Demo guest link: `http://localhost:PORT/guest?reservation=DEMO-123`
+
+## Success Criteria
+After running the app, I should be able to:
+1. Open admin URL → login with provided credentials → see reservations table
+2. Copy a guest link from admin dashboard
+3. Open guest link in new tab → see pre-filled reservation data
+4. Fill in guest details → submit → see access code displayed
+5. Return to admin dashboard → see updated guest details and submission status

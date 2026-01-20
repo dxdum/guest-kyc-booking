@@ -1,0 +1,2448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Guest Check-in System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</head>
+<body>
+    <div class="dashboard-container">
+        <header class="dashboard-header">
+            <div class="header-left">
+                <h1>Guest Check-in System</h1>
+                <span class="badge">Admin Dashboard</span>
+            </div>
+            <div class="header-right">
+                <span class="user-email">{{ session.email }}</span>
+                <a href="{{ url_for('admin_logout') }}" class="btn btn-secondary btn-sm">Logout</a>
+            </div>
+        </header>
+
+        <main class="dashboard-main">
+            <!-- Building Codes Section -->
+            <div class="building-codes-section">
+                <div class="section-header">
+                    <h3>Building Access Codes</h3>
+                    <button class="btn btn-primary btn-sm" onclick="showAddCodeModal()">+ Add Code</button>
+                </div>
+                <div class="codes-list" id="codes-list">
+                    {% for code in building_codes %}
+                    <div class="code-item" data-id="{{ code.id }}" data-order="{{ code.display_order }}" draggable="true">
+                        <span class="drag-handle" title="Drag to reorder">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="5" r="1"></circle><circle cx="9" cy="12" r="1"></circle><circle cx="9" cy="19" r="1"></circle><circle cx="15" cy="5" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="15" cy="19" r="1"></circle></svg>
+                        </span>
+                        <span class="code-name">{{ code.name }}:</span>
+                        <span class="code-value">{{ code.code }}</span>
+                        <button class="btn-icon" onclick="editCode({{ code.id }}, '{{ code.name }}', '{{ code.code }}')" title="Edit">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                        </button>
+                        <button class="btn-icon btn-danger" onclick="deleteCode({{ code.id }})" title="Delete">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        </button>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Reservations Section -->
+            <div class="section-header">
+                <h2>Reservations</h2>
+                <span class="count">{{ reservations|length }} total</span>
+                <div class="section-actions">
+                    <button class="btn btn-primary btn-sm" onclick="showAddReservationModal()">+ New Reservation</button>
+                    <button class="btn btn-secondary btn-sm" onclick="showCorrectionModal()">Issue Correction</button>
+                    <button class="btn btn-secondary btn-sm" onclick="showInvoiceSettingsModal()">Invoice Settings</button>
+                    <a href="/api/reservations/export-csv" class="btn btn-secondary btn-sm">Export CSV</a>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table class="reservations-table">
+                    <thead>
+                        <tr>
+                            <th class="resizable">ID</th>
+                            <th class="resizable">Room</th>
+                            <th class="resizable">Check-in</th>
+                            <th class="resizable">Check-out</th>
+                            <th class="resizable"><span class="th-multiline">Days past<br>checkout</span></th>
+                            <th class="resizable">Apt Code</th>
+                            <th class="resizable">Type</th>
+                            <th class="resizable">Status</th>
+                            <th class="resizable">Guest Details</th>
+                            <th class="resizable">Email</th>
+                            <th class="resizable">Invoice</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for res in reservations %}
+                        {% set checkout_date = res.checkout_date %}
+                        {% set today = now.strftime('%Y-%m-%d') if now else '' %}
+                        <tr class="{{ 'submitted' if res.guest_submitted_at else 'pending' }}" data-id="{{ res.id }}">
+                            <td class="mono editable" data-field="reservation_number">
+                                <span class="display-value">{{ res.reservation_number }}</span>
+                                <input type="text" class="edit-input" value="{{ res.reservation_number }}" style="display:none;">
+                            </td>
+                            <td class="editable" data-field="room_number">
+                                <span class="display-value">{{ res.room_number }}</span>
+                                <input type="number" class="edit-input" value="{{ res.room_number }}" min="1" style="display:none;">
+                            </td>
+                            <td class="editable" data-field="checkin_date">
+                                <span class="display-value">{{ res.checkin_date }}</span>
+                                <input type="date" class="edit-input" value="{{ res.checkin_date }}" style="display:none;">
+                            </td>
+                            <td class="editable" data-field="checkout_date">
+                                <span class="display-value">{{ res.checkout_date }}</span>
+                                <input type="date" class="edit-input" value="{{ res.checkout_date }}" style="display:none;">
+                            </td>
+                            <td class="days-col">
+                                <span class="days-badge" data-checkout="{{ res.checkout_date }}"></span>
+                            </td>
+                            <td class="mono access-code editable" data-field="apartment_code">
+                                <span class="display-value">{{ res.apartment_code }}</span>
+                                <input type="text" class="edit-input" value="{{ res.apartment_code }}" style="display:none;">
+                            </td>
+                            <td class="editable type-col" data-field="invoice_type">
+                                <span class="display-value type-badge type-{{ res.invoice_type or 'none' }}">
+                                    {{ 'Individual' if res.invoice_type == 'individual' else ('Business' if res.invoice_type == 'business' else '-') }}
+                                </span>
+                                <select class="edit-input type-select" style="display:none;" {{ 'disabled' if not res.guest_submitted_at else '' }}>
+                                    <option value="" {{ 'selected' if not res.invoice_type else '' }}>-</option>
+                                    <option value="individual" {{ 'selected' if res.invoice_type == 'individual' else '' }}>Individual</option>
+                                    <option value="business" {{ 'selected' if res.invoice_type == 'business' else '' }}>Business</option>
+                                </select>
+                            </td>
+                            <td class="editable status-col" data-field="status">
+                                <span class="display-value status-badge status-{{ 'invoiced' if res.invoice_generated_at else ('submitted' if res.guest_submitted_at else 'pending') }}">
+                                    {{ 'Invoiced' if res.invoice_generated_at else ('Submitted' if res.guest_submitted_at else 'Pending') }}
+                                </span>
+                                <select class="edit-input status-select" style="display:none;">
+                                    <option value="pending" {{ 'selected' if not res.guest_submitted_at else '' }}>Pending</option>
+                                    <option value="submitted" {{ 'selected' if res.guest_submitted_at and not res.invoice_generated_at else '' }}>Submitted</option>
+                                    <option value="invoiced" {{ 'selected' if res.invoice_generated_at else '' }}>Invoiced</option>
+                                </select>
+                            </td>
+                            <td class="guest-details">
+                                {% if res.guest_submitted_at %}
+                                    <div class="guest-info">
+                                        {% if res.invoice_type == 'individual' %}
+                                            <strong>{{ res.first_name }} {{ res.last_name }}</strong>
+                                        {% else %}
+                                            <strong>{{ res.company_name }}</strong>
+                                            <br><small>Tax ID: {{ res.tax_id }}</small>
+                                            {% if res.vat_eu %}<br><small>VAT EU: {{ res.vat_eu }}</small>{% endif %}
+                                        {% endif %}
+                                        <br><small class="address">{{ res.address }}</small>
+                                        {% if res.special_requests %}
+                                            <br><small><em>Note: {{ res.special_requests }}</em></small>
+                                        {% endif %}
+                                    </div>
+                                {% else %}
+                                    <span class="no-data">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="email-col">
+                                {% if res.email %}
+                                    <a href="mailto:{{ res.email }}" class="email-link">{{ res.email }}</a>
+                                {% else %}
+                                    <span class="no-data">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="invoice-col">
+                                {% if res.invoice_number %}
+                                    <div class="invoice-info">
+                                        <span class="invoice-num clickable" onclick="showEditInvoiceModal({{ res.id }}, '{{ res.invoice_number }}', '{{ res.service_name }}', {{ res.amount_paid or 0 }}, {{ res.vat_rate or 23 }})">
+                                            {{ res.invoice_number }}
+                                        </span>
+                                        <br><small>{{ res.service_name }}</small>
+                                        <br><small>{{ "%.2f"|format(res.amount_paid or 0) }} PLN</small>
+                                        <div class="invoice-actions">
+                                            <button class="btn-icon" onclick="viewInvoice({{ res.id }})" title="View Invoice">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                            </button>
+                                            <button class="btn-icon" onclick="downloadInvoice({{ res.id }})" title="Download Invoice">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                {% elif res.guest_submitted_at %}
+                                    <button class="btn btn-primary btn-sm" onclick="showInvoiceModal({{ res.id }})">
+                                        Generate
+                                    </button>
+                                {% else %}
+                                    <span class="no-data">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="actions-col">
+                                <div class="actions-menu">
+                                    <button class="btn-icon" onclick="copyGuestLink('{{ res.reservation_number }}')" title="Copy Guest Link">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                                    </button>
+                                    <button class="btn-icon edit-row-btn" onclick="toggleEditMode(this)" title="Edit Row">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                                    </button>
+                                    <button class="btn-icon save-row-btn" onclick="saveRow({{ res.id }})" title="Save Changes" style="display:none;">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    </button>
+                                    <button class="btn-icon btn-danger" onclick="deleteReservation({{ res.id }})" title="Delete">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% if not reservations %}
+            <div class="empty-state">
+                <p>No reservations found.</p>
+                <button class="btn btn-primary" onclick="showAddReservationModal()">Create First Reservation</button>
+            </div>
+            {% endif %}
+        </main>
+
+        <footer class="dashboard-footer">
+            <p>Guest Check-in & Invoice Collection System - Demo Version</p>
+        </footer>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">Link copied to clipboard!</div>
+
+    <!-- Add Building Code Modal -->
+    <div id="add-code-modal" class="modal">
+        <div class="modal-content">
+            <h3 id="code-modal-title">Add Building Code</h3>
+            <form id="code-form">
+                <input type="hidden" id="code-id" value="">
+                <div class="form-group">
+                    <label for="code-name">Name (e.g., Main Entrance, Parking Gate)</label>
+                    <input type="text" id="code-name" required placeholder="Main Entrance">
+                </div>
+                <div class="form-group">
+                    <label for="code-value">Code</label>
+                    <input type="text" id="code-value" required placeholder="292929#">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('add-code-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add Reservation Modal -->
+    <div id="add-reservation-modal" class="modal">
+        <div class="modal-content">
+            <h3>Add New Reservation</h3>
+            <form id="reservation-form">
+                <div class="form-group">
+                    <label for="res-number">Reservation Number</label>
+                    <input type="text" id="res-number" required placeholder="BOOK-12345">
+                </div>
+                <div class="form-group">
+                    <label for="res-room">Room Number</label>
+                    <input type="number" id="res-room" required min="1" placeholder="1">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="res-checkin">Check-in Date</label>
+                        <input type="date" id="res-checkin" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="res-checkout">Check-out Date</label>
+                        <input type="date" id="res-checkout" required>
+                    </div>
+                </div>
+                <div id="date-error" class="form-error" style="display:none;">Check-out date must be after check-in date</div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('add-reservation-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Generate Invoice Modal -->
+    <div id="invoice-modal" class="modal">
+        <div class="modal-content">
+            <h3 id="invoice-modal-title">Generate Invoice</h3>
+            <form id="invoice-form">
+                <input type="hidden" id="invoice-res-id" value="">
+                <input type="hidden" id="invoice-edit-mode" value="false">
+                <div class="form-group">
+                    <label for="invoice-number">Invoice Number</label>
+                    <input type="text" id="invoice-number" required>
+                </div>
+                <div class="form-group">
+                    <label for="invoice-service">Service Name</label>
+                    <input type="text" id="invoice-service" value="Apartment Rental" required>
+                </div>
+                <div class="form-group">
+                    <label for="invoice-amount">Amount Paid (PLN)</label>
+                    <input type="number" id="invoice-amount" step="0.01" min="0" required placeholder="500.00">
+                </div>
+                <div class="form-group">
+                    <label for="invoice-vat-rate">VAT Rate (%)</label>
+                    <input type="number" id="invoice-vat-rate" step="0.1" value="8" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('invoice-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="invoice-submit-btn">Generate Invoice</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- View Invoice Modal -->
+    <div id="view-invoice-modal" class="modal">
+        <div class="modal-content modal-lg">
+            <h3>Invoice Preview</h3>
+            <div id="invoice-preview-content"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('view-invoice-modal')">Close</button>
+                <button type="button" class="btn btn-primary" onclick="downloadCurrentInvoice()">Download PDF</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Invoice Settings Modal -->
+    <div id="invoice-settings-modal" class="modal">
+        <div class="modal-content modal-lg">
+            <h3>Invoice Settings</h3>
+            <form id="invoice-settings-form">
+                <div class="settings-section">
+                    <h4>Issuer Details</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="issuer-name">Company/Business Name</label>
+                            <input type="text" id="issuer-name" placeholder="Your Company Name">
+                        </div>
+                        <div class="form-group">
+                            <label for="issuer-tax-id">Tax ID (NIP)</label>
+                            <input type="text" id="issuer-tax-id" placeholder="1234567890">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="issuer-address">Address</label>
+                        <input type="text" id="issuer-address" placeholder="Street, City, Postal Code">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="issuer-vat-eu">VAT EU (optional)</label>
+                            <input type="text" id="issuer-vat-eu" placeholder="PL1234567890">
+                        </div>
+                        <div class="form-group">
+                            <label for="issuer-email">Email</label>
+                            <input type="email" id="issuer-email" placeholder="invoices@company.com">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="issuer-phone">Phone</label>
+                            <input type="text" id="issuer-phone" placeholder="+48 123 456 789">
+                        </div>
+                        <div class="form-group">
+                            <label for="issuer-bank-name">Bank Name</label>
+                            <input type="text" id="issuer-bank-name" placeholder="Bank Name">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="issuer-bank-account">Bank Account (IBAN)</label>
+                        <input type="text" id="issuer-bank-account" placeholder="PL00 0000 0000 0000 0000 0000 0000">
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h4>Invoice Numbering</h4>
+                    <p class="section-desc">Configure invoice number format. Pattern components are assembled left to right.</p>
+
+                    <div id="numbering-components" class="numbering-builder">
+                        <!-- Components will be added here dynamically -->
+                    </div>
+
+                    <div class="component-actions">
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="addNumberingComponent('fixed')">+ Fixed Text</button>
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="addNumberingComponent('delimiter')">+ Delimiter</button>
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="addNumberingComponent('year')">+ Year</button>
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="addNumberingComponent('month')">+ Month</button>
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="addNumberingComponent('rolling')">+ Rolling Number</button>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 16px;">
+                        <label>Preview: <span id="numbering-preview" class="mono"></span></label>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="rolling-current">Current Rolling Number</label>
+                            <input type="number" id="rolling-current" min="0" value="0">
+                            <small class="form-hint">Next invoice will use this number + 1</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="payment-days-due">Payment Due (days)</label>
+                            <input type="number" id="payment-days-due" min="0" value="0">
+                            <small class="form-hint">0 = same day as issuance</small>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="payment-instructions">Payment Instructions</label>
+                        <input type="text" id="payment-instructions" placeholder="e.g., Payment already settled via Booking.com">
+                        <small class="form-hint">Displayed at the bottom of the invoice</small>
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('invoice-settings-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Settings</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Issue Correction Modal -->
+    <div id="correction-modal" class="modal">
+        <div class="modal-content modal-lg">
+            <h3>Issue Invoice Correction</h3>
+            <form id="correction-form">
+                <div class="form-group">
+                    <label for="correction-reservation">Select Reservation ID</label>
+                    <select id="correction-reservation" required>
+                        <option value="">-- Select Reservation --</option>
+                        {% for res in reservations %}
+                            {% if res.invoice_number %}
+                            <option value="{{ res.id }}" data-invoice="{{ res.invoice_number }}" data-status="{{ 'invoiced' if res.invoice_generated_at else '' }}">
+                                {{ res.reservation_number }} - {{ res.invoice_number }}
+                            </option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div id="correction-details" style="display: none;">
+                    <div class="correction-info">
+                        <p><strong>Current Invoice:</strong> <span id="correction-current-invoice"></span></p>
+                        <p><strong>New Invoice Number:</strong> <span id="correction-new-invoice" class="mono"></span></p>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Invoice Type</label>
+                        <div class="invoice-type-buttons">
+                            <button type="button" class="type-btn active" id="corr-btn-individual" onclick="selectCorrectionType('individual')">Individual</button>
+                            <button type="button" class="type-btn" id="corr-btn-business" onclick="selectCorrectionType('business')">Business</button>
+                        </div>
+                        <input type="hidden" id="correction-invoice-type" value="individual">
+                    </div>
+
+                    <div id="corr-individual-fields">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="correction-first-name">First Name</label>
+                                <input type="text" id="correction-first-name">
+                            </div>
+                            <div class="form-group">
+                                <label for="correction-last-name">Last Name</label>
+                                <input type="text" id="correction-last-name">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="corr-business-fields" style="display: none;">
+                        <div class="form-group">
+                            <label for="correction-company">Company Name</label>
+                            <input type="text" id="correction-company">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="correction-tax-id">Tax ID (NIP)</label>
+                                <input type="text" id="correction-tax-id">
+                            </div>
+                            <div class="form-group">
+                                <label for="correction-vat-eu">VAT EU</label>
+                                <input type="text" id="correction-vat-eu">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="correction-address">Address</label>
+                        <input type="text" id="correction-address">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="correction-service">Service Name</label>
+                        <input type="text" id="correction-service" value="Apartment Rental">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="correction-amount">Amount Paid (PLN)</label>
+                            <input type="number" id="correction-amount" step="0.01" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label for="correction-vat-rate">VAT Rate (%)</label>
+                            <input type="number" id="correction-vat-rate" step="0.1" value="8">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('correction-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="correction-submit-btn" disabled>Issue Correction</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Invoice Versions Modal -->
+    <div id="versions-modal" class="modal">
+        <div class="modal-content modal-lg">
+            <h3>Invoice Versions</h3>
+            <div id="versions-list"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('versions-modal')">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const BASE_URL = '{{ base_url }}';
+        let currentInvoiceResId = null;
+
+        // Calculate days since checkout
+        function updateDaysBadges() {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            document.querySelectorAll('.days-badge').forEach(badge => {
+                const checkoutStr = badge.dataset.checkout;
+                if (!checkoutStr) return;
+
+                const checkout = new Date(checkoutStr);
+                checkout.setHours(0, 0, 0, 0);
+
+                const diffTime = today - checkout;
+                const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+                if (diffDays > 0) {
+                    badge.textContent = `+${diffDays}d`;
+                    badge.className = 'days-badge days-past';
+                } else if (diffDays === 0) {
+                    badge.textContent = 'Today';
+                    badge.className = 'days-badge days-today';
+                } else {
+                    badge.textContent = `${Math.abs(diffDays)}d`;
+                    badge.className = 'days-badge days-future';
+                }
+            });
+        }
+
+        updateDaysBadges();
+
+        // Toast notification
+        function showToast(message = 'Link copied to clipboard!') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2000);
+        }
+
+        // Copy guest link
+        function copyGuestLink(reservationNumber) {
+            const link = `${BASE_URL}/guest?reservation=${reservationNumber}`;
+            navigator.clipboard.writeText(link).then(() => showToast('Guest link copied!'));
+        }
+
+        // Modal functions
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        function showAddCodeModal() {
+            document.getElementById('code-modal-title').textContent = 'Add Building Code';
+            document.getElementById('code-id').value = '';
+            document.getElementById('code-name').value = '';
+            document.getElementById('code-value').value = '';
+            document.getElementById('add-code-modal').style.display = 'flex';
+        }
+
+        function editCode(id, name, code) {
+            document.getElementById('code-modal-title').textContent = 'Edit Building Code';
+            document.getElementById('code-id').value = id;
+            document.getElementById('code-name').value = name;
+            document.getElementById('code-value').value = code;
+            document.getElementById('add-code-modal').style.display = 'flex';
+        }
+
+        function showAddReservationModal() {
+            document.getElementById('res-number').value = '';
+            document.getElementById('res-room').value = '';
+            document.getElementById('res-checkin').value = '';
+            document.getElementById('res-checkout').value = '';
+            document.getElementById('date-error').style.display = 'none';
+            document.getElementById('add-reservation-modal').style.display = 'flex';
+        }
+
+        async function showInvoiceModal(resId) {
+            document.getElementById('invoice-modal-title').textContent = 'Generate Invoice';
+            document.getElementById('invoice-res-id').value = resId;
+            document.getElementById('invoice-edit-mode').value = 'false';
+            document.getElementById('invoice-service').value = 'Apartment Rental';
+            document.getElementById('invoice-amount').value = '';
+            document.getElementById('invoice-vat-rate').value = '8';
+            document.getElementById('invoice-submit-btn').textContent = 'Generate Invoice';
+
+            // Fetch and display the next invoice number
+            const response = await fetch('/api/next-invoice-number');
+            const data = await response.json();
+            document.getElementById('invoice-number').value = data.invoice_number || '';
+
+            document.getElementById('invoice-modal').style.display = 'flex';
+        }
+
+        function showEditInvoiceModal(resId, invoiceNumber, serviceName, amount, vatRate) {
+            document.getElementById('invoice-modal-title').textContent = 'Edit Invoice';
+            document.getElementById('invoice-res-id').value = resId;
+            document.getElementById('invoice-edit-mode').value = 'true';
+            document.getElementById('invoice-number').value = invoiceNumber;
+            document.getElementById('invoice-service').value = serviceName;
+            document.getElementById('invoice-amount').value = amount;
+            document.getElementById('invoice-vat-rate').value = vatRate;
+            document.getElementById('invoice-submit-btn').textContent = 'Save Changes';
+            document.getElementById('invoice-modal').style.display = 'flex';
+        }
+
+        // Update single field
+        async function updateField(resId, field, value) {
+            const data = {};
+            data[field] = value || null;
+
+            const response = await fetch(`/api/reservations/${resId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            if (response.ok) {
+                showToast('Updated!');
+            } else {
+                alert('Failed to update');
+                location.reload();
+            }
+        }
+
+        // Update status
+        async function updateStatus(resId, status) {
+            let data = {};
+
+            if (status === 'pending') {
+                // Reset to pending
+                data = {
+                    invoice_type: null,
+                    first_name: null,
+                    last_name: null,
+                    company_name: null,
+                    tax_id: null,
+                    vat_eu: null,
+                    address: null,
+                    email: null,
+                    special_requests: null,
+                    service_name: 'Apartment Rental',
+                    amount_paid: null,
+                    vat_rate: 8.0,
+                    vat_amount: null,
+                    invoice_generated_at: null,
+                    invoice_number: null,
+                    guest_submitted_at: null
+                };
+            } else if (status === 'submitted') {
+                // Clear invoice but keep guest data
+                data = {
+                    invoice_generated_at: null,
+                    invoice_number: null,
+                    amount_paid: null,
+                    vat_amount: null
+                };
+            }
+            // For 'invoiced', show the generate invoice modal
+            if (status === 'invoiced') {
+                showInvoiceModal(resId);
+                // Reset dropdown to previous value
+                location.reload();
+                return;
+            }
+
+            const response = await fetch(`/api/reservations/${resId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            if (response.ok) {
+                location.reload();
+            } else {
+                alert('Failed to update status');
+                location.reload();
+            }
+        }
+
+        // Building code form
+        document.getElementById('code-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('code-id').value;
+            const data = {
+                name: document.getElementById('code-name').value,
+                code: document.getElementById('code-value').value
+            };
+
+            const url = id ? `/api/building-codes/${id}` : '/api/building-codes';
+            const method = id ? 'PUT' : 'POST';
+
+            const response = await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            if (response.ok) {
+                location.reload();
+            } else {
+                const result = await response.json();
+                alert(result.error || 'Failed to save building code');
+            }
+        });
+
+        // Delete building code
+        async function deleteCode(id) {
+            if (!confirm('Delete this building code?')) return;
+
+            const response = await fetch(`/api/building-codes/${id}`, { method: 'DELETE' });
+            if (response.ok) {
+                location.reload();
+            } else {
+                alert('Failed to delete building code');
+            }
+        }
+
+        // Reservation form with date validation
+        document.getElementById('reservation-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const checkin = document.getElementById('res-checkin').value;
+            const checkout = document.getElementById('res-checkout').value;
+
+            // Validate checkout > checkin
+            if (new Date(checkout) <= new Date(checkin)) {
+                document.getElementById('date-error').style.display = 'block';
+                return;
+            }
+            document.getElementById('date-error').style.display = 'none';
+
+            const data = {
+                reservation_number: document.getElementById('res-number').value,
+                room_number: parseInt(document.getElementById('res-room').value),
+                checkin_date: checkin,
+                checkout_date: checkout
+            };
+
+            const response = await fetch('/api/reservations', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            if (response.ok) {
+                location.reload();
+            } else {
+                const result = await response.json();
+                alert(result.error || 'Failed to create reservation');
+            }
+        });
+
+        // Invoice form (generate or edit)
+        document.getElementById('invoice-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const resId = document.getElementById('invoice-res-id').value;
+            const isEdit = document.getElementById('invoice-edit-mode').value === 'true';
+
+            const data = {
+                invoice_number: document.getElementById('invoice-number').value || undefined,
+                service_name: document.getElementById('invoice-service').value,
+                amount_paid: parseFloat(document.getElementById('invoice-amount').value),
+                vat_rate: parseFloat(document.getElementById('invoice-vat-rate').value)
+            };
+
+            const url = isEdit ? `/api/reservations/${resId}` : `/api/reservations/${resId}/generate-invoice`;
+            const method = isEdit ? 'PUT' : 'POST';
+
+            // For edit, also calculate VAT amount
+            if (isEdit) {
+                data.vat_amount = Math.round(data.amount_paid * data.vat_rate / (100 + data.vat_rate) * 100) / 100;
+            }
+
+            const response = await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            if (response.ok) {
+                location.reload();
+            } else {
+                const result = await response.json();
+                alert(result.error || 'Failed to process invoice');
+            }
+        });
+
+        // Edit row functions
+        function toggleEditMode(btn) {
+            const row = btn.closest('tr');
+            const editCells = row.querySelectorAll('.editable');
+            const editBtn = row.querySelector('.edit-row-btn');
+            const saveBtn = row.querySelector('.save-row-btn');
+
+            editCells.forEach(cell => {
+                const display = cell.querySelector('.display-value');
+                const input = cell.querySelector('.edit-input');
+                display.style.display = 'none';
+                input.style.display = 'block';
+            });
+
+            editBtn.style.display = 'none';
+            saveBtn.style.display = 'inline-flex';
+        }
+
+        async function saveRow(resId) {
+            const row = document.querySelector(`tr[data-id="${resId}"]`);
+            const data = {};
+
+            // Get checkin and checkout for validation
+            let checkinVal, checkoutVal;
+
+            row.querySelectorAll('.editable').forEach(cell => {
+                const field = cell.dataset.field;
+                const input = cell.querySelector('.edit-input');
+
+                // Handle special fields
+                if (field === 'status') {
+                    const statusVal = input.value;
+                    // Status changes are handled separately via updateStatus
+                    if (statusVal === 'pending') {
+                        data.guest_submitted_at = null;
+                        data.invoice_generated_at = null;
+                        data.invoice_number = null;
+                    } else if (statusVal === 'submitted') {
+                        data.invoice_generated_at = null;
+                        data.invoice_number = null;
+                    }
+                    return;
+                }
+
+                if (field === 'invoice_type') {
+                    data.invoice_type = input.value || null;
+                    return;
+                }
+
+                const value = field === 'room_number' ? parseInt(input.value) : input.value;
+                data[field] = value;
+
+                if (field === 'checkin_date') checkinVal = input.value;
+                if (field === 'checkout_date') checkoutVal = input.value;
+            });
+
+            // Validate dates
+            if (checkinVal && checkoutVal && new Date(checkoutVal) <= new Date(checkinVal)) {
+                alert('Check-out date must be after check-in date');
+                return;
+            }
+
+            const response = await fetch(`/api/reservations/${resId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            if (response.ok) {
+                location.reload();
+            } else {
+                const result = await response.json();
+                alert(result.error || 'Failed to update reservation');
+            }
+        }
+
+        // Delete reservation
+        async function deleteReservation(resId) {
+            if (!confirm('Delete this reservation permanently?')) return;
+
+            const response = await fetch(`/api/reservations/${resId}`, { method: 'DELETE' });
+            if (response.ok) {
+                location.reload();
+            } else {
+                alert('Failed to delete reservation');
+            }
+        }
+
+        // View invoice - check for versions first
+        async function viewInvoice(resId) {
+            currentInvoiceResId = resId;
+
+            // Check if there are multiple versions
+            const versionsRes = await fetch(`/api/reservations/${resId}/versions`);
+            const versions = await versionsRes.json();
+
+            if (versions.length > 1) {
+                // Show versions list
+                showInvoiceVersionsList(resId, versions);
+                return;
+            }
+
+            // Single version or no versions - show invoice directly
+            await viewInvoiceDirect(resId);
+        }
+
+        // Download invoice - check for versions first
+        async function downloadInvoice(resId) {
+            currentInvoiceResId = resId;
+
+            // Check if there are multiple versions
+            const versionsRes = await fetch(`/api/reservations/${resId}/versions`);
+            const versions = await versionsRes.json();
+
+            if (versions.length > 1) {
+                // Show versions list for download selection
+                showInvoiceVersionsList(resId, versions, true);
+                return;
+            }
+
+            // Single version - download directly
+            await viewInvoiceDirect(resId);
+            setTimeout(() => {
+                downloadCurrentInvoice();
+                closeModal('view-invoice-modal');
+            }, 500);
+        }
+
+        // Show versions list modal
+        function showInvoiceVersionsList(resId, versions, forDownload = false) {
+            const container = document.getElementById('versions-list');
+
+            container.innerHTML = versions.map(v => {
+                const data = JSON.parse(v.invoice_data);
+                const date = v.created_at.split('T')[0];
+                return `
+                    <div class="version-item">
+                        <div class="version-header">
+                            <span class="version-number">${v.version_number === 1 ? 'Original Invoice' : 'Correction #' + (v.version_number - 1)}</span>
+                            <span class="version-date">${date}</span>
+                        </div>
+                        <div class="version-details">
+                            <span class="version-invoice mono">${v.invoice_number}</span>
+                            <span>${data.amount_paid ? data.amount_paid.toFixed(2).replace('.', ',') + ' PLN' : '-'}</span>
+                        </div>
+                        <div class="version-actions">
+                            <button class="btn btn-sm btn-secondary" onclick="viewVersionInvoice(${resId}, ${v.version_number})" title="View">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                            </button>
+                            <button class="btn btn-sm btn-primary" onclick="downloadVersionInvoice(${resId}, ${v.version_number})" title="Download">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('versions-modal').style.display = 'flex';
+        }
+
+        // View specific version
+        async function viewVersionInvoice(resId, versionNumber) {
+            closeModal('versions-modal');
+
+            const versionsRes = await fetch(`/api/reservations/${resId}/versions`);
+            const versions = await versionsRes.json();
+            const version = versions.find(v => v.version_number === versionNumber);
+
+            if (!version) {
+                alert('Version not found');
+                return;
+            }
+
+            // Get reservation for reservation_number
+            const resResponse = await fetch('/api/reservations');
+            const reservations = await resResponse.json();
+            const reservation = reservations.find(r => r.id === resId);
+
+            const data = JSON.parse(version.invoice_data);
+            // Merge version data with reservation data
+            const mergedData = {
+                ...reservation,
+                ...data,
+                invoice_number: version.invoice_number
+            };
+
+            await viewInvoiceWithData(mergedData);
+        }
+
+        // Download specific version
+        async function downloadVersionInvoice(resId, versionNumber) {
+            await viewVersionInvoice(resId, versionNumber);
+            setTimeout(() => {
+                downloadCurrentInvoice();
+                closeModal('view-invoice-modal');
+            }, 500);
+        }
+
+        // View invoice with provided data
+        async function viewInvoiceWithData(res) {
+            const netAmount = res.amount_paid - res.vat_amount;
+
+            // Format amounts with comma (Polish format)
+            const formatAmount = (num) => num.toFixed(2).replace('.', ',');
+
+            // Format date as dd/mm/yyyy
+            const formatDate = (dateStr) => {
+                const d = new Date(dateStr);
+                const day = String(d.getDate()).padStart(2, '0');
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const year = d.getFullYear();
+                return `${day}/${month}/${year}`;
+            };
+
+            // Get issuance date (just date, no time)
+            const rawIssuanceDate = res.invoice_generated_at ? res.invoice_generated_at.split('T')[0] : new Date().toISOString().split('T')[0];
+            const issuanceDate = formatDate(rawIssuanceDate);
+
+            // Fetch payment days due and payment instructions from settings
+            const settingsRes = await fetch('/api/invoice-settings');
+            const settings = await settingsRes.json();
+            const paymentDaysDue = settings.payment_days_due || 0;
+            const paymentInstructions = settings.payment_instructions || 'Payment already settled via Booking.com';
+
+            // Calculate payment date
+            const issuanceDateObj = new Date(rawIssuanceDate);
+            issuanceDateObj.setDate(issuanceDateObj.getDate() + paymentDaysDue);
+            const paymentDate = formatDate(issuanceDateObj);
+
+            const html = `
+                <div class="invoice-preview" id="invoice-to-download">
+                    <div class="invoice-header">
+                        <h2>INVOICE ${res.invoice_number}</h2>
+                        <table class="invoice-meta-table">
+                            <tr><td>Issuance Date</td><td>${issuanceDate}</td></tr>
+                            <tr><td>Payment Date</td><td>${paymentDate}</td></tr>
+                        </table>
+                    </div>
+
+                    <div class="invoice-items">
+                        <div class="invoice-row">
+                            <span class="invoice-label">Invoice From</span>
+                            <span class="invoice-value">${settings.issuer_name || 'Property Manager'}, ${settings.issuer_address || 'Address'}${settings.issuer_tax_id ? ', Tax ID: ' + settings.issuer_tax_id : ''}${settings.issuer_vat_eu ? ', VAT EU: ' + settings.issuer_vat_eu : ''}</span>
+                        </div>
+                        <div class="invoice-row invoice-row-section-end">
+                            <span class="invoice-label">Invoice To</span>
+                            <span class="invoice-value">${res.invoice_type === 'individual'
+                                ? `${res.first_name} ${res.last_name}, ${res.address}`
+                                : `${res.company_name}, Tax ID: ${res.tax_id}${res.vat_eu ? ', VAT EU: ' + res.vat_eu : ''}, ${res.address}`
+                            }</span>
+                        </div>
+                        <div class="invoice-row">
+                            <span class="invoice-label">Description</span>
+                            <span class="invoice-value">${res.service_name} - Reservation ${res.reservation_number}</span>
+                        </div>
+                        <div class="invoice-row">
+                            <span class="invoice-label">Net Amount</span>
+                            <span class="invoice-value">${formatAmount(netAmount)} PLN</span>
+                        </div>
+                        <div class="invoice-row invoice-row-section-end">
+                            <span class="invoice-label">VAT (${res.vat_rate}%)</span>
+                            <span class="invoice-value">${formatAmount(res.vat_amount)} PLN</span>
+                        </div>
+                        <div class="invoice-row invoice-total">
+                            <span class="invoice-label">Total</span>
+                            <span class="invoice-value">${formatAmount(res.amount_paid)} PLN</span>
+                        </div>
+                    </div>
+
+                    <div class="invoice-footer">
+                        <div class="payment-instructions">
+                            <h4>Payment Instructions</h4>
+                            <p>${paymentInstructions}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('invoice-preview-content').innerHTML = html;
+            document.getElementById('view-invoice-modal').style.display = 'flex';
+        }
+
+        // View invoice directly (no version check)
+        async function viewInvoiceDirect(resId) {
+            // Fetch reservation data
+            const response = await fetch(`/api/reservations`);
+            const reservations = await response.json();
+            const res = reservations.find(r => r.id === resId);
+
+            if (!res) {
+                alert('Reservation not found');
+                return;
+            }
+
+            await viewInvoiceWithData(res);
+        }
+
+        function downloadCurrentInvoice() {
+            const element = document.getElementById('invoice-to-download');
+            if (!element) return;
+
+            const opt = {
+                margin: 10,
+                filename: `invoice-${Date.now()}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2 },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+
+            html2pdf().set(opt).from(element).save();
+        }
+
+        // Close modals on outside click
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) closeModal(modal.id);
+            });
+        });
+
+        // ============== DRAG AND DROP FOR BUILDING CODES ==============
+        const codesList = document.getElementById('codes-list');
+        let draggedItem = null;
+
+        codesList.addEventListener('dragstart', (e) => {
+            if (e.target.classList.contains('code-item')) {
+                draggedItem = e.target;
+                e.target.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+            }
+        });
+
+        codesList.addEventListener('dragend', (e) => {
+            if (e.target.classList.contains('code-item')) {
+                e.target.classList.remove('dragging');
+                draggedItem = null;
+                // Save new order
+                saveCodeOrder();
+            }
+        });
+
+        codesList.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            const afterElement = getDragAfterElement(codesList, e.clientX);
+            if (draggedItem) {
+                if (afterElement == null) {
+                    codesList.appendChild(draggedItem);
+                } else {
+                    codesList.insertBefore(draggedItem, afterElement);
+                }
+            }
+        });
+
+        function getDragAfterElement(container, x) {
+            const draggableElements = [...container.querySelectorAll('.code-item:not(.dragging)')];
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = x - box.left - box.width / 2;
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else {
+                    return closest;
+                }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
+
+        async function saveCodeOrder() {
+            const items = [...codesList.querySelectorAll('.code-item')];
+            const updates = items.map((item, index) => ({
+                id: parseInt(item.dataset.id),
+                display_order: index + 1
+            }));
+
+            for (const update of updates) {
+                await fetch(`/api/building-codes/${update.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ display_order: update.display_order })
+                });
+            }
+            showToast('Order saved!');
+        }
+
+        // ============== RESIZABLE COLUMNS ==============
+        function initResizableColumns() {
+            const table = document.querySelector('.reservations-table');
+            const headers = table.querySelectorAll('th.resizable');
+
+            headers.forEach(header => {
+                const resizer = document.createElement('div');
+                resizer.className = 'column-resizer';
+                header.appendChild(resizer);
+                header.style.position = 'relative';
+
+                let startX, startWidth;
+
+                resizer.addEventListener('mousedown', (e) => {
+                    startX = e.pageX;
+                    startWidth = header.offsetWidth;
+                    document.addEventListener('mousemove', handleMouseMove);
+                    document.addEventListener('mouseup', handleMouseUp);
+                    resizer.classList.add('resizing');
+                    e.preventDefault();
+                });
+
+                function handleMouseMove(e) {
+                    const width = startWidth + (e.pageX - startX);
+                    if (width > 50) {
+                        header.style.width = width + 'px';
+                        header.style.minWidth = width + 'px';
+                    }
+                }
+
+                function handleMouseUp() {
+                    document.removeEventListener('mousemove', handleMouseMove);
+                    document.removeEventListener('mouseup', handleMouseUp);
+                    resizer.classList.remove('resizing');
+                }
+            });
+        }
+
+        initResizableColumns();
+
+        // ============== INVOICE SETTINGS ==============
+        let numberingComponents = [];
+
+        async function showInvoiceSettingsModal() {
+            // Load current settings
+            const response = await fetch('/api/invoice-settings');
+            const settings = await response.json();
+
+            // Populate issuer fields
+            document.getElementById('issuer-name').value = settings.issuer_name || '';
+            document.getElementById('issuer-address').value = settings.issuer_address || '';
+            document.getElementById('issuer-tax-id').value = settings.issuer_tax_id || '';
+            document.getElementById('issuer-vat-eu').value = settings.issuer_vat_eu || '';
+            document.getElementById('issuer-email').value = settings.issuer_email || '';
+            document.getElementById('issuer-phone').value = settings.issuer_phone || '';
+            document.getElementById('issuer-bank-name').value = settings.issuer_bank_name || '';
+            document.getElementById('issuer-bank-account').value = settings.issuer_bank_account || '';
+            document.getElementById('rolling-current').value = settings.rolling_number_current || 0;
+            document.getElementById('payment-days-due').value = settings.payment_days_due || 0;
+            document.getElementById('payment-instructions').value = settings.payment_instructions || '';
+
+            // Parse and display numbering pattern
+            try {
+                numberingComponents = JSON.parse(settings.numbering_pattern || '[]');
+            } catch (e) {
+                numberingComponents = [];
+            }
+            renderNumberingComponents();
+
+            document.getElementById('invoice-settings-modal').style.display = 'flex';
+        }
+
+        function renderNumberingComponents() {
+            const container = document.getElementById('numbering-components');
+            container.innerHTML = '';
+
+            numberingComponents.forEach((comp, index) => {
+                const div = document.createElement('div');
+                div.className = 'numbering-component';
+                div.draggable = true;
+                div.dataset.index = index;
+                div.innerHTML = getComponentHTML(comp, index);
+                container.appendChild(div);
+            });
+
+            updateNumberingPreview();
+            initNumberingDragDrop();
+        }
+
+        let dragState = {
+            draggedEl: null,
+            draggedIndex: null,
+            originalOrder: [],
+            placeholderIndex: null
+        };
+
+        function initNumberingDragDrop() {
+            const container = document.getElementById('numbering-components');
+
+            container.querySelectorAll('.numbering-component').forEach(el => {
+                el.addEventListener('dragstart', (e) => {
+                    dragState.draggedEl = el;
+                    dragState.draggedIndex = parseInt(el.dataset.index);
+                    dragState.originalOrder = [...numberingComponents];
+                    dragState.placeholderIndex = dragState.draggedIndex;
+
+                    setTimeout(() => el.classList.add('dragging'), 0);
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+
+                el.addEventListener('dragend', () => {
+                    // Commit the reorder
+                    if (dragState.placeholderIndex !== null && dragState.placeholderIndex !== dragState.draggedIndex) {
+                        const [removed] = dragState.originalOrder.splice(dragState.draggedIndex, 1);
+                        dragState.originalOrder.splice(dragState.placeholderIndex, 0, removed);
+                        numberingComponents = [...dragState.originalOrder];
+                    }
+
+                    // Clean up
+                    container.querySelectorAll('.numbering-component').forEach(c => {
+                        c.classList.remove('dragging', 'shift-right', 'shift-left', 'drop-target');
+                    });
+                    container.querySelectorAll('.drop-placeholder').forEach(p => p.remove());
+
+                    dragState = { draggedEl: null, draggedIndex: null, originalOrder: [], placeholderIndex: null };
+                    renderNumberingComponents();
+                });
+
+                el.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    if (!dragState.draggedEl || el === dragState.draggedEl) return;
+
+                    const targetIndex = parseInt(el.dataset.index);
+                    if (dragState.placeholderIndex === targetIndex) return;
+
+                    dragState.placeholderIndex = targetIndex;
+                    updateDragPreview(container, targetIndex);
+                });
+
+                el.addEventListener('dragleave', () => {
+                    el.classList.remove('drop-target');
+                });
+            });
+
+            container.addEventListener('dragover', (e) => {
+                e.preventDefault();
+            });
+        }
+
+        function updateDragPreview(container, targetIndex) {
+            const items = container.querySelectorAll('.numbering-component');
+
+            items.forEach((item, idx) => {
+                item.classList.remove('shift-right', 'shift-left', 'drop-target');
+
+                if (item === dragState.draggedEl) return;
+
+                const originalIdx = parseInt(item.dataset.index);
+
+                if (dragState.draggedIndex < targetIndex) {
+                    // Dragging right: items between drag and target shift left
+                    if (originalIdx > dragState.draggedIndex && originalIdx <= targetIndex) {
+                        item.classList.add('shift-left');
+                    }
+                } else {
+                    // Dragging left: items between target and drag shift right
+                    if (originalIdx >= targetIndex && originalIdx < dragState.draggedIndex) {
+                        item.classList.add('shift-right');
+                    }
+                }
+
+                if (originalIdx === targetIndex) {
+                    item.classList.add('drop-target');
+                }
+            });
+        }
+
+        function getComponentHTML(comp, index) {
+            let inner = '';
+            switch (comp.type) {
+                case 'fixed':
+                    inner = `<input type="text" class="comp-input" value="${comp.value || ''}" onchange="updateComponent(${index}, 'value', this.value)" placeholder="Text">`;
+                    break;
+                case 'delimiter':
+                    inner = `<select class="comp-input" onchange="updateComponent(${index}, 'value', this.value)">
+                        <option value="-" ${comp.value === '-' ? 'selected' : ''}>- (dash)</option>
+                        <option value="/" ${comp.value === '/' ? 'selected' : ''}>/ (slash)</option>
+                        <option value="_" ${comp.value === '_' ? 'selected' : ''}>_ (underscore)</option>
+                        <option value="." ${comp.value === '.' ? 'selected' : ''}>. (dot)</option>
+                    </select>`;
+                    break;
+                case 'year':
+                    inner = `<span class="comp-label">Year (${new Date().getFullYear()})</span>`;
+                    break;
+                case 'month':
+                    inner = `<span class="comp-label">Month (${String(new Date().getMonth() + 1).padStart(2, '0')})</span>`;
+                    break;
+                case 'rolling':
+                    inner = `<select class="comp-input" onchange="updateComponent(${index}, 'format', this.value)">
+                        <option value="0" ${comp.format === '0' ? 'selected' : ''}>0 (no padding)</option>
+                        <option value="00" ${comp.format === '00' ? 'selected' : ''}>00 (2 digits)</option>
+                        <option value="000" ${comp.format === '000' || !comp.format ? 'selected' : ''}>000 (3 digits)</option>
+                        <option value="0000" ${comp.format === '0000' ? 'selected' : ''}>0000 (4 digits)</option>
+                        <option value="00000" ${comp.format === '00000' ? 'selected' : ''}>00000 (5 digits)</option>
+                    </select>`;
+                    break;
+            }
+
+            return `
+                <span class="comp-drag-handle" title="Drag to reorder">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="5" r="1"></circle><circle cx="9" cy="12" r="1"></circle><circle cx="9" cy="19" r="1"></circle><circle cx="15" cy="5" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="15" cy="19" r="1"></circle></svg>
+                </span>
+                <span class="comp-type">${comp.type}</span>
+                ${inner}
+                <button type="button" class="btn-icon btn-danger" onclick="removeComponent(${index})">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            `;
+        }
+
+        function addNumberingComponent(type) {
+            const defaults = {
+                'fixed': { type: 'fixed', value: 'INV' },
+                'delimiter': { type: 'delimiter', value: '/' },
+                'year': { type: 'year' },
+                'month': { type: 'month' },
+                'rolling': { type: 'rolling', format: '000' }
+            };
+            numberingComponents.push(defaults[type]);
+            renderNumberingComponents();
+        }
+
+        function updateComponent(index, field, value) {
+            numberingComponents[index][field] = value;
+            updateNumberingPreview();
+        }
+
+        function removeComponent(index) {
+            numberingComponents.splice(index, 1);
+            renderNumberingComponents();
+        }
+
+        function updateNumberingPreview() {
+            const rollingCurrent = parseInt(document.getElementById('rolling-current').value) || 0;
+            const now = new Date();
+            let preview = '';
+
+            numberingComponents.forEach(comp => {
+                switch (comp.type) {
+                    case 'fixed':
+                        preview += comp.value || '';
+                        break;
+                    case 'delimiter':
+                        preview += comp.value || '';
+                        break;
+                    case 'year':
+                        preview += now.getFullYear();
+                        break;
+                    case 'month':
+                        preview += String(now.getMonth() + 1).padStart(2, '0');
+                        break;
+                    case 'rolling':
+                        const format = comp.format || '000';
+                        preview += String(rollingCurrent + 1).padStart(format.length, '0');
+                        break;
+                }
+            });
+
+            document.getElementById('numbering-preview').textContent = preview || '(empty)';
+        }
+
+        document.getElementById('rolling-current').addEventListener('input', updateNumberingPreview);
+
+        document.getElementById('invoice-settings-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const data = {
+                issuer_name: document.getElementById('issuer-name').value,
+                issuer_address: document.getElementById('issuer-address').value,
+                issuer_tax_id: document.getElementById('issuer-tax-id').value,
+                issuer_vat_eu: document.getElementById('issuer-vat-eu').value,
+                issuer_email: document.getElementById('issuer-email').value,
+                issuer_phone: document.getElementById('issuer-phone').value,
+                issuer_bank_name: document.getElementById('issuer-bank-name').value,
+                issuer_bank_account: document.getElementById('issuer-bank-account').value,
+                numbering_pattern: JSON.stringify(numberingComponents),
+                rolling_number_current: parseInt(document.getElementById('rolling-current').value) || 0,
+                payment_days_due: parseInt(document.getElementById('payment-days-due').value) || 0,
+                payment_instructions: document.getElementById('payment-instructions').value
+            };
+
+            const response = await fetch('/api/invoice-settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            if (response.ok) {
+                closeModal('invoice-settings-modal');
+                showToast('Settings saved!');
+            } else {
+                alert('Failed to save settings');
+            }
+        });
+
+        // ============== INVOICE CORRECTIONS ==============
+        let currentCorrectionResId = null;
+        let correctionInvoiceType = 'individual';
+        let originalCorrectionData = null;
+
+        function selectCorrectionType(type) {
+            correctionInvoiceType = type;
+            document.getElementById('correction-invoice-type').value = type;
+            document.getElementById('corr-btn-individual').classList.toggle('active', type === 'individual');
+            document.getElementById('corr-btn-business').classList.toggle('active', type === 'business');
+            document.getElementById('corr-individual-fields').style.display = type === 'individual' ? 'block' : 'none';
+            document.getElementById('corr-business-fields').style.display = type === 'business' ? 'block' : 'none';
+        }
+
+        function showCorrectionModal() {
+            document.getElementById('correction-reservation').value = '';
+            document.getElementById('correction-details').style.display = 'none';
+            document.getElementById('correction-submit-btn').disabled = true;
+            document.getElementById('correction-modal').style.display = 'flex';
+        }
+
+        document.getElementById('correction-reservation').addEventListener('change', async function() {
+            const resId = this.value;
+            const detailsDiv = document.getElementById('correction-details');
+            const submitBtn = document.getElementById('correction-submit-btn');
+
+            if (!resId) {
+                detailsDiv.style.display = 'none';
+                submitBtn.disabled = true;
+                return;
+            }
+
+            currentCorrectionResId = resId;
+
+            // Get reservation details
+            const response = await fetch('/api/reservations');
+            const reservations = await response.json();
+            const res = reservations.find(r => r.id === parseInt(resId));
+
+            if (!res) {
+                alert('Reservation not found');
+                return;
+            }
+
+            // Check if invoice exists
+            if (!res.invoice_number) {
+                alert('No invoice exists for this reservation');
+                this.value = '';
+                return;
+            }
+
+            // Show current invoice info
+            document.getElementById('correction-current-invoice').textContent = res.invoice_number;
+
+            // Calculate new invoice number
+            const baseNumber = res.invoice_number.split('_CORRECTED')[0];
+            const versions = await fetch(`/api/reservations/${resId}/versions`).then(r => r.json());
+            const versionCount = versions.length || 0;
+
+            let newInvoiceNumber;
+            if (versionCount === 0) {
+                newInvoiceNumber = `${baseNumber}_CORRECTED`;
+            } else {
+                newInvoiceNumber = `${baseNumber}_CORRECTED_${versionCount}`;
+            }
+            document.getElementById('correction-new-invoice').textContent = newInvoiceNumber;
+
+            // Pre-fill all current values
+            selectCorrectionType(res.invoice_type || 'individual');
+            document.getElementById('correction-first-name').value = res.first_name || '';
+            document.getElementById('correction-last-name').value = res.last_name || '';
+            document.getElementById('correction-company').value = res.company_name || '';
+            document.getElementById('correction-tax-id').value = res.tax_id || '';
+            document.getElementById('correction-vat-eu').value = res.vat_eu || '';
+            document.getElementById('correction-address').value = res.address || '';
+            document.getElementById('correction-service').value = res.service_name || 'Apartment Rental';
+            document.getElementById('correction-amount').value = res.amount_paid || '';
+            document.getElementById('correction-vat-rate').value = res.vat_rate || 8;
+
+            // Store original data for comparison
+            originalCorrectionData = {
+                invoice_type: res.invoice_type || 'individual',
+                first_name: res.first_name || '',
+                last_name: res.last_name || '',
+                company_name: res.company_name || '',
+                tax_id: res.tax_id || '',
+                vat_eu: res.vat_eu || '',
+                address: res.address || '',
+                service_name: res.service_name || 'Apartment Rental',
+                amount_paid: res.amount_paid || 0,
+                vat_rate: res.vat_rate || 8
+            };
+
+            detailsDiv.style.display = 'block';
+            submitBtn.disabled = false;
+        });
+
+        document.getElementById('correction-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            if (!currentCorrectionResId) return;
+
+            const data = {
+                invoice_type: correctionInvoiceType,
+                first_name: document.getElementById('correction-first-name').value,
+                last_name: document.getElementById('correction-last-name').value,
+                company_name: document.getElementById('correction-company').value,
+                tax_id: document.getElementById('correction-tax-id').value,
+                vat_eu: document.getElementById('correction-vat-eu').value,
+                address: document.getElementById('correction-address').value,
+                service_name: document.getElementById('correction-service').value,
+                amount_paid: parseFloat(document.getElementById('correction-amount').value),
+                vat_rate: parseFloat(document.getElementById('correction-vat-rate').value)
+            };
+
+            // Check if any changes were made
+            if (originalCorrectionData) {
+                const hasChanges =
+                    data.invoice_type !== originalCorrectionData.invoice_type ||
+                    data.first_name !== originalCorrectionData.first_name ||
+                    data.last_name !== originalCorrectionData.last_name ||
+                    data.company_name !== originalCorrectionData.company_name ||
+                    data.tax_id !== originalCorrectionData.tax_id ||
+                    data.vat_eu !== originalCorrectionData.vat_eu ||
+                    data.address !== originalCorrectionData.address ||
+                    data.service_name !== originalCorrectionData.service_name ||
+                    data.amount_paid !== originalCorrectionData.amount_paid ||
+                    data.vat_rate !== originalCorrectionData.vat_rate;
+
+                if (!hasChanges) {
+                    alert('No changes detected. Please modify at least one field before issuing a correction.');
+                    return;
+                }
+            }
+
+            const response = await fetch(`/api/reservations/${currentCorrectionResId}/correction`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                closeModal('correction-modal');
+                showToast(`Correction issued: ${result.reservation.invoice_number}`);
+                location.reload();
+            } else {
+                const error = await response.json();
+                alert(error.error || 'Failed to issue correction');
+            }
+        });
+
+        // View invoice versions
+        async function viewInvoiceVersions(resId) {
+            const response = await fetch(`/api/reservations/${resId}/versions`);
+            const versions = await response.json();
+
+            const container = document.getElementById('versions-list');
+
+            if (versions.length === 0) {
+                container.innerHTML = '<p class="no-data">No versions found for this invoice.</p>';
+            } else {
+                container.innerHTML = versions.map(v => {
+                    const data = JSON.parse(v.invoice_data);
+                    return `
+                        <div class="version-item">
+                            <div class="version-header">
+                                <span class="version-number">${v.version_number === 1 ? 'Original' : 'Correction ' + (v.version_number - 1)}</span>
+                                <span class="version-invoice">${v.invoice_number}</span>
+                                <span class="version-date">${v.created_at.split('T')[0]}</span>
+                            </div>
+                            <div class="version-details">
+                                <span>${data.service_name}</span>
+                                <span>${data.amount_paid ? data.amount_paid.toFixed(2) + ' PLN' : '-'}</span>
+                            </div>
+                            <div class="version-actions">
+                                <button class="btn btn-sm btn-secondary" onclick="viewVersionInvoice(${resId}, ${v.version_number})">View</button>
+                                <button class="btn btn-sm btn-primary" onclick="downloadVersionInvoice(${resId}, ${v.version_number})">Download</button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            document.getElementById('versions-modal').style.display = 'flex';
+        }
+    </script>
+
+    <style>
+        .table-container {
+            overflow-x: auto;
+            max-width: 100%;
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+
+        /* Custom scrollbar styling - white inside with light blue border */
+        .table-container::-webkit-scrollbar {
+            height: 14px;
+        }
+
+        .table-container::-webkit-scrollbar-track {
+            background: #ffffff;
+            border: 2px solid #93c5fd;
+            border-radius: 7px;
+        }
+
+        .table-container::-webkit-scrollbar-thumb {
+            background: #ffffff;
+            border-radius: 5px;
+            border: 2px solid #93c5fd;
+        }
+
+        .table-container::-webkit-scrollbar-thumb:hover {
+            background: #f8fafc;
+            border-color: #60a5fa;
+        }
+
+        /* Firefox scrollbar */
+        .table-container {
+            scrollbar-width: thin;
+            scrollbar-color: #93c5fd #ffffff;
+        }
+
+        /* Multiline table header */
+        .th-multiline {
+            display: block;
+            line-height: 1.3;
+            text-align: center;
+        }
+
+        /* Resizable columns */
+        .column-resizer {
+            position: absolute;
+            right: 0;
+            top: 0;
+            height: 100%;
+            width: 5px;
+            cursor: col-resize;
+            background: transparent;
+            transition: background 0.2s;
+        }
+
+        .column-resizer:hover,
+        .column-resizer.resizing {
+            background: #0071c2;
+        }
+
+        th.resizable {
+            user-select: none;
+        }
+
+        /* Drag handle for building codes */
+        .drag-handle {
+            cursor: grab;
+            color: #94a3b8;
+            display: flex;
+            align-items: center;
+            align-self: center;
+            padding: 2px;
+            margin-right: 4px;
+        }
+
+        .drag-handle:hover {
+            color: #64748b;
+        }
+
+        .code-item.dragging {
+            opacity: 0.5;
+            background: #e0f2fe;
+        }
+
+        .code-item {
+            cursor: default;
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+
+        .code-item:hover {
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        /* Type and Status badges */
+        .type-badge, .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .type-badge.type-individual {
+            background: #dbeafe;
+            color: #1d4ed8;
+        }
+
+        .type-badge.type-business {
+            background: #fae8ff;
+            color: #a21caf;
+        }
+
+        .type-badge.type-none {
+            background: #f1f5f9;
+            color: #94a3b8;
+        }
+
+        .status-badge.status-pending {
+            background: #fef3c7;
+            color: #b45309;
+        }
+
+        .status-badge.status-submitted {
+            background: #dbeafe;
+            color: #1d4ed8;
+        }
+
+        .status-badge.status-invoiced {
+            background: #d1fae5;
+            color: #047857;
+        }
+
+        /* Invoice Settings Styles */
+        .settings-section {
+            background: #f8fafc;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .settings-section h4 {
+            margin: 0 0 16px 0;
+            font-size: 14px;
+            color: #1e293b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .section-desc {
+            font-size: 13px;
+            color: #64748b;
+            margin-bottom: 16px;
+        }
+
+        .form-hint {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-top: 4px;
+        }
+
+        .numbering-builder {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 16px;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            margin-bottom: 12px;
+            min-height: 60px;
+        }
+
+        .numbering-component {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            cursor: grab;
+            transition: opacity 0.15s, box-shadow 0.15s;
+        }
+
+        .numbering-component:hover {
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .numbering-component.dragging {
+            opacity: 0.5;
+            cursor: grabbing;
+        }
+
+        .comp-drag-handle {
+            color: #94a3b8;
+            display: flex;
+            align-items: center;
+            cursor: grab;
+        }
+
+        .comp-drag-handle:hover {
+            color: #64748b;
+        }
+
+        .numbering-component.shift-left {
+            transform: translateX(-10px);
+            transition: transform 0.2s ease;
+        }
+
+        .numbering-component.shift-right {
+            transform: translateX(10px);
+            transition: transform 0.2s ease;
+        }
+
+        .numbering-component.drop-target {
+            border-color: #0071c2;
+            background: #e0f2fe;
+            box-shadow: 0 0 0 2px rgba(0, 113, 194, 0.3);
+        }
+
+        .comp-type {
+            font-size: 11px;
+            font-weight: 600;
+            color: #64748b;
+            text-transform: uppercase;
+        }
+
+        .comp-input {
+            padding: 4px 8px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            font-size: 13px;
+            max-width: 100px;
+        }
+
+        .comp-label {
+            font-size: 13px;
+            color: #475569;
+        }
+
+        .component-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        /* Correction Modal Styles */
+        .correction-info {
+            background: #f0f9ff;
+            padding: 16px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            border-left: 4px solid #0071c2;
+        }
+
+        .correction-info p {
+            margin: 6px 0;
+            font-size: 14px;
+        }
+
+        /* Invoice Versions Styles */
+        .version-item {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+
+        .version-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .version-number {
+            font-weight: 600;
+            color: #1e293b;
+        }
+
+        .version-invoice {
+            font-family: 'Monaco', 'Menlo', monospace;
+            color: #0071c2;
+        }
+
+        .version-date {
+            font-size: 13px;
+            color: #64748b;
+        }
+
+        .version-details {
+            display: flex;
+            gap: 16px;
+            font-size: 14px;
+            color: #475569;
+            margin-bottom: 12px;
+        }
+
+        .version-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .reservations-table {
+            min-width: 1400px;
+            width: 100%;
+        }
+
+        .building-codes-section {
+            background: #f8fafc;
+            padding: 16px 20px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+        }
+
+        .building-codes-section .section-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 12px;
+        }
+
+        .building-codes-section h3 {
+            margin: 0;
+            font-size: 14px;
+            color: #475569;
+        }
+
+        .codes-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .code-item {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+            padding: 8px 12px;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+        }
+
+        .code-name {
+            font-size: 13px;
+            color: #64748b;
+        }
+
+        .code-value {
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 14px;
+            font-weight: 600;
+            color: #0071c2;
+            margin-right: 8px;
+        }
+
+        .code-item .btn-icon {
+            align-self: center;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .section-actions {
+            margin-left: auto;
+            display: flex;
+            gap: 8px;
+        }
+
+        .days-col {
+            text-align: center;
+        }
+
+        .days-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .days-past {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .days-today {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .days-future {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .type-select, .status-select {
+            padding: 4px 8px;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            background: white;
+        }
+
+        .type-select:disabled {
+            background: #f8fafc;
+            cursor: not-allowed;
+        }
+
+        .status-select.status-pending {
+            background: #fef3c7;
+            border-color: #fcd34d;
+        }
+
+        .status-select.status-submitted {
+            background: #dbeafe;
+            border-color: #60a5fa;
+        }
+
+        .status-select.status-invoiced {
+            background: #d1fae5;
+            border-color: #34d399;
+        }
+
+        .email-link {
+            color: #0071c2;
+            text-decoration: none;
+            font-size: 12px;
+        }
+
+        .email-link:hover {
+            text-decoration: underline;
+        }
+
+        .actions-col {
+            white-space: nowrap;
+        }
+
+        .actions-menu {
+            display: flex;
+            gap: 4px;
+        }
+
+        .btn-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            padding: 0;
+            border: none;
+            background: #f1f5f9;
+            border-radius: 4px;
+            cursor: pointer;
+            color: #475569;
+            transition: all 0.2s;
+        }
+
+        .btn-icon:hover {
+            background: #e2e8f0;
+            color: #0071c2;
+        }
+
+        .btn-icon.btn-danger:hover {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+
+        .editable .edit-input {
+            width: 100%;
+            padding: 4px 8px;
+            border: 1px solid #0071c2;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .invoice-col {
+            min-width: 120px;
+        }
+
+        .invoice-info {
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .invoice-num {
+            color: #065f46;
+            font-weight: 600;
+        }
+
+        .invoice-num.clickable {
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .invoice-num.clickable:hover {
+            color: #047857;
+        }
+
+        .invoice-actions {
+            display: flex;
+            gap: 4px;
+            margin-top: 4px;
+        }
+
+        .invoice-actions .btn-icon {
+            width: 24px;
+            height: 24px;
+        }
+
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-content.modal-lg {
+            max-width: 700px;
+        }
+
+        .modal-content h3 {
+            margin: 0 0 20px 0;
+            color: #1e293b;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            color: #475569;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #0071c2;
+            box-shadow: 0 0 0 3px rgba(0, 113, 194, 0.1);
+        }
+
+        .form-row {
+            display: flex;
+            gap: 12px;
+        }
+
+        .form-row .form-group {
+            flex: 1;
+        }
+
+        .form-error {
+            color: #dc2626;
+            font-size: 13px;
+            margin-bottom: 12px;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 24px;
+        }
+
+        .guest-details {
+            max-width: 180px;
+        }
+
+        .guest-info {
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        /* Invoice preview styles */
+        .invoice-preview {
+            background: white;
+            padding: 30px;
+            font-family: Arial, sans-serif;
+        }
+
+        .invoice-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding-bottom: 20px;
+            margin-bottom: 20px;
+        }
+
+        .invoice-header h2 {
+            margin: 0;
+            font-size: 18px;
+            color: #0071c2;
+        }
+
+        .invoice-meta {
+            text-align: right;
+            font-size: 14px;
+        }
+
+        .invoice-meta p {
+            margin: 4px 0;
+        }
+
+        .invoice-parties {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+        }
+
+        .invoice-seller, .invoice-buyer {
+            flex: 1;
+        }
+
+        .invoice-parties h4 {
+            margin: 0 0 8px 0;
+            color: #475569;
+        }
+
+        .invoice-parties p {
+            margin: 0;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .invoice-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+
+        .invoice-table th, .invoice-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .invoice-table th {
+            background: #f8fafc;
+            font-weight: 600;
+            color: #475569;
+        }
+
+        .invoice-table tfoot td {
+            border-bottom: none;
+        }
+
+        .invoice-table .text-right {
+            text-align: right;
+        }
+
+        .invoice-items {
+            margin-bottom: 30px;
+        }
+
+        .invoice-row {
+            display: flex;
+            padding: 10px 0;
+            font-size: 14px;
+        }
+
+        .invoice-label {
+            color: #475569;
+            width: 140px;
+            flex-shrink: 0;
+            font-weight: 600;
+        }
+
+        .invoice-value {
+            font-weight: 500;
+            color: #1f2937;
+            flex: 1;
+        }
+
+        .invoice-row-section-end {
+            margin-bottom: 20px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .invoice-total {
+            padding-top: 8px;
+        }
+
+        .invoice-total .invoice-label,
+        .invoice-total .invoice-value {
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        .invoice-footer {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #1f2937;
+        }
+
+        .invoice-meta-table {
+            border-collapse: collapse;
+        }
+
+        .invoice-meta-table td {
+            padding: 4px 0;
+            font-size: 14px;
+        }
+
+        .invoice-meta-table td:first-child {
+            text-align: left;
+            padding-right: 24px;
+            color: #64748b;
+            font-weight: 600;
+        }
+
+        .invoice-meta-table td:last-child {
+            text-align: left;
+            font-weight: 500;
+        }
+
+        .payment-instructions {
+            margin-top: 40px;
+            padding-top: 10px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .payment-instructions h4 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: #475569;
+        }
+
+        .payment-instructions p {
+            margin: 0;
+            font-size: 14px;
+            color: #1f2937;
+        }
+    </style>
+</body>
+</html>

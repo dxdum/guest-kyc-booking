@@ -1,0 +1,72 @@
+ADMIN DASHBOARD IMPROVEMENTS - TO BE IMPLEMENTED
+================================================
+
+## TABLE UI CHANGES
+
+1. Only allow choosing invoice type and status when clicking edit button (to save space)
+2. Change column header from 'Reservation #' to 'ID'
+3. Change 'Days' column to 'Days past checkout' on 2 lines
+4. Add resizable columns (like Google Sheets/Excel) - drag to adjust width on hover
+5. Scrollbar styling: white background with light blue border
+6. Drag and drop for building access codes to control their order
+
+## INVOICE DETAILS
+
+1. Default service name: 'Apartment Rental' (instead of 'Accommodation')
+2. Add option to edit invoice details when clicking edit button (currently missing)
+
+## INVOICE SETTINGS (New Admin Section)
+
+1. Invoice issuer details - provide, edit and save
+2. Invoice numbering logic configuration:
+   - Define fixed text phrase (e.g., "FAK")
+   - Define delimiters (e.g., "-", "/")
+   - Define dynamic parts: year, month, rolling number
+   - Rolling number format options: 0, 00, 000, 0000, 00000
+   - Example: FAK-2025-01/001 means:
+     * Fixed: "FAK"
+     * Delimiter: "-"
+     * Year: "2025"
+     * Delimiter: "-"
+     * Month: "01"
+     * Delimiter: "/"
+     * Rolling number: "001" (format: 000)
+   - Must end with invoice numbering
+   - Option to set starting number for new invoices
+   - Automatic duplicate detection (only unique invoice numbers allowed)
+
+## INVOICE DELIVERY CHANGES
+
+1. Remove guest invoice download option from the system
+2. Only admin can download and deliver invoice to customer externally (e.g., via email)
+3. This enables the invoice correction feature
+
+## INVOICE CORRECTIONS SYSTEM
+
+1. Add "Issue Correction" button next to "New Reservation"
+2. Workflow:
+   a. Display box/modal to choose reservation ID
+   b. Check if invoice has status "Sent to Client"
+      - If not, must change to "Sent to Client" first
+   c. Display current invoice data
+   d. Allow amendments to the data
+   e. Check if anything was changed
+      - If nothing changed, block issuing correction
+   f. Issue correction
+
+3. Invoice versioning:
+   - When viewing/downloading invoice with corrections, show all versions:
+     * Original invoice
+     * Correction 1 (with date issued)
+     * Correction 2 (with date issued)
+     * etc.
+   - View and Download buttons next to each version
+
+4. Naming convention:
+   - Original: [invoice_number]
+   - First correction: [invoice_number]_CORRECTED
+   - Second correction: [invoice_number]_CORRECTED_2
+   - Third correction: [invoice_number]_CORRECTED_3
+   - And so on...
+
+5. Unlimited corrections allowed (can issue correction on top of correction)

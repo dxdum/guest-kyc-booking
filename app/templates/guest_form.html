@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guest Check-in</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</head>
+<body class="guest-page">
+    <div class="guest-container">
+        <div class="guest-card">
+
+            {% if error %}
+            <!-- Error State -->
+            <div class="error-container">
+                <div class="error-icon">!</div>
+                <h2>Unable to Load Reservation</h2>
+                <p>{{ error }}</p>
+                <p class="error-hint">Please check the link you received or contact the property manager.</p>
+            </div>
+
+            {% elif already_submitted %}
+            <!-- Already Submitted - Show Access Codes -->
+            <div class="success-container" id="success-content">
+                <!-- Room Number - Big and Prominent -->
+                <div class="room-number-box">
+                    <div class="room-label">Your Apartment</div>
+                    <div class="room-value">Room {{ reservation.room_number }}</div>
+                </div>
+
+                <h2>Your Access Codes</h2>
+
+                <div class="access-codes-section">
+                    {% for code in building_codes %}
+                    <div class="access-code-card main-door">
+                        <div class="code-label">{{ code.name }}</div>
+                        <div class="code-value">{{ code.code }}</div>
+                        <div class="code-hint">Building access</div>
+                    </div>
+                    {% endfor %}
+                    <div class="access-code-card apartment">
+                        <div class="code-label">Apartment Code</div>
+                        <div class="code-value">{{ reservation.apartment_code }}</div>
+                        <div class="code-hint">Your room door</div>
+                    </div>
+                </div>
+
+                <div class="stay-info">
+                    <div class="stay-row">
+                        <span class="stay-label">Reservation:</span>
+                        <span class="stay-value">{{ reservation.reservation_number }}</span>
+                    </div>
+                    <div class="stay-row">
+                        <span class="stay-label">Check-in:</span>
+                        <span class="stay-value">{{ reservation.checkin_date }}</span>
+                    </div>
+                    <div class="stay-row">
+                        <span class="stay-label">Check-out:</span>
+                        <span class="stay-value">{{ reservation.checkout_date }}</span>
+                    </div>
+                    <div class="stay-times">Check-in from 15:00 &bull; Check-out by 11:00 (Warsaw time)</div>
+                </div>
+
+                <!-- Invoice Details -->
+                <div class="submitted-details">
+                    <div class="details-header">Invoice Details</div>
+                    <div class="submitted-info">
+                        {% if reservation.invoice_type == 'individual' %}
+                        <div class="detail-row"><span class="detail-label">Name:</span> {{ reservation.first_name }} {{ reservation.last_name }}</div>
+                        {% else %}
+                        <div class="detail-row"><span class="detail-label">Company:</span> {{ reservation.company_name }}</div>
+                        <div class="detail-row"><span class="detail-label">Tax ID:</span> {{ reservation.tax_id }}</div>
+                        {% if reservation.vat_eu %}
+                        <div class="detail-row"><span class="detail-label">VAT EU:</span> {{ reservation.vat_eu }}</div>
+                        {% endif %}
+                        {% endif %}
+                        <div class="detail-row"><span class="detail-label">Address:</span> {{ reservation.address }}</div>
+                        <div class="detail-row"><span class="detail-label">Email:</span> {{ reservation.email }}</div>
+                        {% if reservation.special_requests %}
+                        <div class="detail-row"><span class="detail-label">Notes:</span> {{ reservation.special_requests }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if reservation.invoice_number %}
+                <!-- Invoice Notice - Admin delivers invoice externally -->
+                <div class="invoice-notice-section">
+                    <p>Invoice will be sent to your email address by the property manager.</p>
+                </div>
+                {% endif %}
+
+                <div class="action-buttons">
+                    {% if can_edit %}
+                    <button class="btn btn-secondary" onclick="showEditForm()">Edit Details</button>
+                    {% else %}
+                    <button class="btn btn-secondary btn-disabled" disabled title="Editing not available within 1 hour of checkout">Edit Details</button>
+                    {% endif %}
+                    <button class="btn btn-secondary" onclick="shareAccessCode()">Share</button>
+                    <button class="btn btn-primary" onclick="downloadPDF()">Download PDF</button>
+                </div>
+            </div>
+
+            <!-- Edit Form (hidden by default when already submitted) -->
+            <div id="edit-form-container" style="display: none;">
+                <div class="section reservation-section">
+                    <div class="room-number-box">
+                        <div class="room-label">Your Apartment</div>
+                        <div class="room-value">Room {{ reservation.room_number }}</div>
+                    </div>
+
+                    <div class="reservation-details">
+                        <div class="info-row">
+                            <span class="info-label">Reservation</span>
+                            <span class="info-value">{{ reservation.reservation_number }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Check-in</span>
+                            <span class="info-value">{{ reservation.checkin_date }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Check-out</span>
+                            <span class="info-value">{{ reservation.checkout_date }}</span>
+                        </div>
+                    </div>
+                    <div class="checkin-times">Check-in from 15:00 &bull; Check-out by 11:00 (Warsaw time)</div>
+                </div>
+
+                <div class="section invoice-section">
+                    <div class="invoice-notice edit-mode">
+                        <p>Update your invoice details below.</p>
+                    </div>
+
+                    <form id="edit-form">
+                        <input type="hidden" name="reservation_number" value="{{ reservation.reservation_number }}">
+
+                        <div class="invoice-type-buttons">
+                            <button type="button" class="type-btn {{ 'active' if reservation.invoice_type == 'individual' else '' }}" id="edit-btn-individual" onclick="selectEditType('individual')">
+                                Individual
+                            </button>
+                            <button type="button" class="type-btn {{ 'active' if reservation.invoice_type == 'business' else '' }}" id="edit-btn-business" onclick="selectEditType('business')">
+                                Business
+                            </button>
+                        </div>
+                        <input type="hidden" name="invoice_type" id="edit_invoice_type" value="{{ reservation.invoice_type }}">
+
+                        <div id="edit-individual-fields" class="form-fields" style="display: {{ 'block' if reservation.invoice_type == 'individual' else 'none' }};">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="edit_first_name">Name <span class="req">*</span></label>
+                                    <input type="text" id="edit_first_name" name="first_name" value="{{ reservation.first_name or '' }}">
+                                </div>
+                                <div class="form-group">
+                                    <label for="edit_last_name">Surname <span class="req">*</span></label>
+                                    <input type="text" id="edit_last_name" name="last_name" value="{{ reservation.last_name or '' }}">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="edit_address_individual">Address <span class="req">*</span></label>
+                                <textarea id="edit_address_individual" name="address" rows="2">{{ reservation.address if reservation.invoice_type == 'individual' else '' }}</textarea>
+                            </div>
+                        </div>
+
+                        <div id="edit-business-fields" class="form-fields" style="display: {{ 'block' if reservation.invoice_type == 'business' else 'none' }};">
+                            <div class="form-group">
+                                <label for="edit_company_name">Company Name <span class="req">*</span></label>
+                                <input type="text" id="edit_company_name" name="company_name" value="{{ reservation.company_name or '' }}">
+                            </div>
+                            <div class="form-group">
+                                <label for="edit_address_business">Address <span class="req">*</span></label>
+                                <textarea id="edit_address_business" name="address" rows="2">{{ reservation.address if reservation.invoice_type == 'business' else '' }}</textarea>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="edit_tax_id">Tax ID (NIP) <span class="req">*</span></label>
+                                    <input type="text" id="edit_tax_id" name="tax_id" value="{{ reservation.tax_id or '' }}">
+                                </div>
+                                <div class="form-group">
+                                    <label for="edit_vat_eu">VAT EU Number <span class="opt">(optional)</span></label>
+                                    <input type="text" id="edit_vat_eu" name="vat_eu" value="{{ reservation.vat_eu or '' }}">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="edit_email">Email <span class="req">*</span></label>
+                            <input type="email" id="edit_email" name="email" value="{{ reservation.email or '' }}" placeholder="For invoice delivery">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="edit_special_requests">Special Requests <span class="opt">(optional)</span></label>
+                            <textarea id="edit_special_requests" name="special_requests" rows="2">{{ reservation.special_requests or '' }}</textarea>
+                        </div>
+
+                        <div id="edit-form-errors" class="form-errors" style="display: none;"></div>
+
+                        <div class="form-buttons">
+                            <button type="button" class="btn btn-secondary" onclick="cancelEdit()">Cancel</button>
+                            <button type="submit" class="btn btn-primary" id="edit-submit-btn">Save Changes</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            {% else %}
+            <!-- Form State - First Time Submission -->
+            <div id="form-container">
+                <!-- Section 1: Reservation Info -->
+                <div class="section reservation-section">
+                    <!-- Room Number - Big and Prominent -->
+                    <div class="room-number-box">
+                        <div class="room-label">Your Apartment</div>
+                        <div class="room-value">Room {{ reservation.room_number }}</div>
+                    </div>
+
+                    <div class="reservation-details">
+                        <div class="info-row">
+                            <span class="info-label">Reservation</span>
+                            <span class="info-value">{{ reservation.reservation_number }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Check-in</span>
+                            <span class="info-value">{{ reservation.checkin_date }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Check-out</span>
+                            <span class="info-value">{{ reservation.checkout_date }}</span>
+                        </div>
+                    </div>
+                    <div class="checkin-times">Check-in from 15:00 &bull; Check-out by 11:00 (Warsaw time)</div>
+                </div>
+
+                <!-- Section 2: Invoice Form -->
+                <div class="section invoice-section">
+                    <div class="invoice-notice">
+                        <p>Please provide your details for the invoice to receive your apartment access code.</p>
+                    </div>
+
+                    <form id="guest-form">
+                        <input type="hidden" name="reservation_number" value="{{ reservation.reservation_number }}">
+
+                        <!-- Invoice Type Buttons -->
+                        <div class="invoice-type-buttons">
+                            <button type="button" class="type-btn active" id="btn-individual" onclick="selectType('individual')">
+                                Individual
+                            </button>
+                            <button type="button" class="type-btn" id="btn-business" onclick="selectType('business')">
+                                Business
+                            </button>
+                        </div>
+                        <input type="hidden" name="invoice_type" id="invoice_type" value="individual">
+
+                        <!-- Individual Fields (shown by default) -->
+                        <div id="individual-fields" class="form-fields">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="first_name">Name <span class="req">*</span></label>
+                                    <input type="text" id="first_name" name="first_name" placeholder="First name">
+                                </div>
+                                <div class="form-group">
+                                    <label for="last_name">Surname <span class="req">*</span></label>
+                                    <input type="text" id="last_name" name="last_name" placeholder="Last name">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="address_individual">Address <span class="req">*</span></label>
+                                <textarea id="address_individual" name="address" rows="2" placeholder="Street, City, Postal Code, Country"></textarea>
+                            </div>
+                        </div>
+
+                        <!-- Business Fields (hidden by default) -->
+                        <div id="business-fields" class="form-fields" style="display: none;">
+                            <div class="form-group">
+                                <label for="company_name">Company Name <span class="req">*</span></label>
+                                <input type="text" id="company_name" name="company_name" placeholder="Company name">
+                            </div>
+                            <div class="form-group">
+                                <label for="address_business">Address <span class="req">*</span></label>
+                                <textarea id="address_business" name="address" rows="2" placeholder="Street, City, Postal Code, Country"></textarea>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="tax_id">Tax ID (NIP) <span class="req">*</span></label>
+                                    <input type="text" id="tax_id" name="tax_id" placeholder="e.g., 1234567890">
+                                </div>
+                                <div class="form-group">
+                                    <label for="vat_eu">VAT EU Number <span class="opt">(optional)</span></label>
+                                    <input type="text" id="vat_eu" name="vat_eu" placeholder="e.g., PL1234567890">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Email field (always visible) -->
+                        <div class="form-group">
+                            <label for="email">Email <span class="req">*</span></label>
+                            <input type="email" id="email" name="email" placeholder="For invoice delivery">
+                        </div>
+
+                        <!-- Special Requests (always visible) -->
+                        <div class="form-group">
+                            <label for="special_requests">Special Requests for Invoice <span class="opt">(optional)</span></label>
+                            <textarea id="special_requests" name="special_requests" rows="2" placeholder="Any special requirements or notes..."></textarea>
+                        </div>
+
+                        <div id="form-errors" class="form-errors" style="display: none;"></div>
+
+                        <button type="submit" class="btn btn-primary btn-full" id="submit-btn">
+                            Submit & Get Access Code
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Success State (shown after form submission) -->
+            <div id="success-container" class="success-container" style="display: none;">
+                <div id="success-content">
+                    <!-- Room Number - Big and Prominent -->
+                    <div class="room-number-box">
+                        <div class="room-label">Your Apartment</div>
+                        <div class="room-value">Room <span id="room-number-display"></span></div>
+                    </div>
+
+                    <h2>Your Access Codes</h2>
+
+                    <div class="access-codes-section" id="dynamic-codes-section">
+                        <!-- Building codes will be populated dynamically -->
+                    </div>
+
+                    <div class="stay-info">
+                        <div class="stay-row">
+                            <span class="stay-label">Reservation:</span>
+                            <span class="stay-value" id="summary-reservation"></span>
+                        </div>
+                        <div class="stay-row">
+                            <span class="stay-label">Check-in:</span>
+                            <span class="stay-value" id="summary-checkin"></span>
+                        </div>
+                        <div class="stay-row">
+                            <span class="stay-label">Check-out:</span>
+                            <span class="stay-value" id="summary-checkout"></span>
+                        </div>
+                        <div class="stay-times">Check-in from 15:00 &bull; Check-out by 11:00 (Warsaw time)</div>
+                    </div>
+
+                    <!-- Submitted Details for Verification -->
+                    <div class="submitted-details">
+                        <div class="details-header">Invoice Details</div>
+                        <div id="submitted-info"></div>
+                    </div>
+
+                    <div class="action-buttons">
+                        <button class="btn btn-secondary" id="success-edit-btn" onclick="location.reload()">Edit Details</button>
+                        <button class="btn btn-secondary" onclick="shareAccessCode()">Share</button>
+                        <button class="btn btn-primary" onclick="downloadPDF()">Download PDF</button>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        let selectedType = 'individual';
+        let editSelectedType = '{{ reservation.invoice_type if reservation else "individual" }}';
+
+        function selectType(type) {
+            selectedType = type;
+            document.getElementById('invoice_type').value = type;
+
+            document.getElementById('btn-individual').classList.toggle('active', type === 'individual');
+            document.getElementById('btn-business').classList.toggle('active', type === 'business');
+
+            document.getElementById('individual-fields').style.display = type === 'individual' ? 'block' : 'none';
+            document.getElementById('business-fields').style.display = type === 'business' ? 'block' : 'none';
+
+            if (type === 'individual') {
+                document.getElementById('company_name').value = '';
+                document.getElementById('tax_id').value = '';
+                document.getElementById('vat_eu').value = '';
+                document.getElementById('address_business').value = '';
+            } else {
+                document.getElementById('first_name').value = '';
+                document.getElementById('last_name').value = '';
+                document.getElementById('address_individual').value = '';
+            }
+        }
+
+        function selectEditType(type) {
+            editSelectedType = type;
+            document.getElementById('edit_invoice_type').value = type;
+
+            document.getElementById('edit-btn-individual').classList.toggle('active', type === 'individual');
+            document.getElementById('edit-btn-business').classList.toggle('active', type === 'business');
+
+            document.getElementById('edit-individual-fields').style.display = type === 'individual' ? 'block' : 'none';
+            document.getElementById('edit-business-fields').style.display = type === 'business' ? 'block' : 'none';
+        }
+
+        function showEditForm() {
+            document.getElementById('success-content').style.display = 'none';
+            document.getElementById('edit-form-container').style.display = 'block';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function cancelEdit() {
+            document.getElementById('edit-form-container').style.display = 'none';
+            document.getElementById('success-content').style.display = 'block';
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // New submission form
+            const form = document.getElementById('guest-form');
+            if (form) {
+                form.addEventListener('submit', async function(e) {
+                    e.preventDefault();
+
+                    const submitBtn = document.getElementById('submit-btn');
+                    const errorsDiv = document.getElementById('form-errors');
+
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = 'Submitting...';
+                    errorsDiv.style.display = 'none';
+
+                    const formData = new FormData(form);
+
+                    const addressIndividual = document.getElementById('address_individual').value;
+                    const addressBusiness = document.getElementById('address_business').value;
+                    formData.set('address', selectedType === 'individual' ? addressIndividual : addressBusiness);
+
+                    try {
+                        const response = await fetch('/guest/submit', {
+                            method: 'POST',
+                            body: formData
+                        });
+
+                        const result = await response.json();
+
+                        if (result.success) {
+                            document.getElementById('form-container').style.display = 'none';
+
+                            // Populate building codes dynamically
+                            const codesSection = document.getElementById('dynamic-codes-section');
+                            let codesHtml = '';
+                            for (const code of result.building_codes) {
+                                codesHtml += `
+                                    <div class="access-code-card main-door">
+                                        <div class="code-label">${code.name}</div>
+                                        <div class="code-value">${code.code}</div>
+                                        <div class="code-hint">Building access</div>
+                                    </div>
+                                `;
+                            }
+                            codesHtml += `
+                                <div class="access-code-card apartment">
+                                    <div class="code-label">Apartment Code</div>
+                                    <div class="code-value">${result.apartment_code}</div>
+                                    <div class="code-hint">Your room door</div>
+                                </div>
+                            `;
+                            codesSection.innerHTML = codesHtml;
+
+                            document.getElementById('room-number-display').textContent = result.room_number;
+                            document.getElementById('summary-reservation').textContent = result.reservation_number;
+                            document.getElementById('summary-checkin').textContent = result.checkin_date;
+                            document.getElementById('summary-checkout').textContent = result.checkout_date;
+
+                            // Populate submitted details
+                            let detailsHtml = '';
+                            if (selectedType === 'individual') {
+                                const firstName = document.getElementById('first_name').value;
+                                const lastName = document.getElementById('last_name').value;
+                                detailsHtml = `
+                                    <div class="detail-row"><span class="detail-label">Name:</span> ${firstName} ${lastName}</div>
+                                `;
+                            } else {
+                                const companyName = document.getElementById('company_name').value;
+                                const taxId = document.getElementById('tax_id').value;
+                                const vatEu = document.getElementById('vat_eu').value;
+                                detailsHtml = `
+                                    <div class="detail-row"><span class="detail-label">Company:</span> ${companyName}</div>
+                                    <div class="detail-row"><span class="detail-label">Tax ID:</span> ${taxId}</div>
+                                    ${vatEu ? `<div class="detail-row"><span class="detail-label">VAT EU:</span> ${vatEu}</div>` : ''}
+                                `;
+                            }
+                            detailsHtml += `<div class="detail-row"><span class="detail-label">Address:</span> ${result.address}</div>`;
+                            detailsHtml += `<div class="detail-row"><span class="detail-label">Email:</span> ${result.email}</div>`;
+
+                            const specialRequests = document.getElementById('special_requests').value;
+                            if (specialRequests) {
+                                detailsHtml += `<div class="detail-row"><span class="detail-label">Notes:</span> ${specialRequests}</div>`;
+                            }
+                            document.getElementById('submitted-info').innerHTML = detailsHtml;
+
+                            document.getElementById('success-container').style.display = 'block';
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                        } else {
+                            const errors = result.errors || [result.error || 'An error occurred'];
+                            errorsDiv.innerHTML = errors.map(e => `<p>${e}</p>`).join('');
+                            errorsDiv.style.display = 'block';
+
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = 'Submit & Get Access Code';
+                        }
+                    } catch (error) {
+                        errorsDiv.innerHTML = '<p>Network error. Please try again.</p>';
+                        errorsDiv.style.display = 'block';
+
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = 'Submit & Get Access Code';
+                    }
+                });
+            }
+
+            // Edit form submission
+            const editForm = document.getElementById('edit-form');
+            if (editForm) {
+                editForm.addEventListener('submit', async function(e) {
+                    e.preventDefault();
+
+                    const submitBtn = document.getElementById('edit-submit-btn');
+                    const errorsDiv = document.getElementById('edit-form-errors');
+
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = 'Saving...';
+                    errorsDiv.style.display = 'none';
+
+                    const formData = new FormData(editForm);
+
+                    const addressIndividual = document.getElementById('edit_address_individual').value;
+                    const addressBusiness = document.getElementById('edit_address_business').value;
+                    formData.set('address', editSelectedType === 'individual' ? addressIndividual : addressBusiness);
+
+                    try {
+                        const response = await fetch('/guest/submit', {
+                            method: 'POST',
+                            body: formData
+                        });
+
+                        const result = await response.json();
+
+                        if (result.success) {
+                            location.reload();
+                        } else {
+                            const errors = result.errors || [result.error || 'An error occurred'];
+                            errorsDiv.innerHTML = errors.map(e => `<p>${e}</p>`).join('');
+                            errorsDiv.style.display = 'block';
+
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = 'Save Changes';
+                        }
+                    } catch (error) {
+                        errorsDiv.innerHTML = '<p>Network error. Please try again.</p>';
+                        errorsDiv.style.display = 'block';
+
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = 'Save Changes';
+                    }
+                });
+            }
+        });
+
+        function shareAccessCode() {
+            if (navigator.share) {
+                navigator.share({
+                    title: 'Apartment Access Codes',
+                    text: 'Here are my apartment access codes.',
+                    url: window.location.href
+                }).catch(() => {
+                    navigator.clipboard.writeText(window.location.href);
+                    alert('Link copied to clipboard!');
+                });
+            } else {
+                navigator.clipboard.writeText(window.location.href);
+                alert('Link copied to clipboard!');
+            }
+        }
+
+        function downloadPDF() {
+            const element = document.getElementById('success-content') || document.querySelector('.success-container');
+            const opt = {
+                margin: 20,
+                filename: 'apartment-access-codes.pdf',
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2 },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+
+            const buttons = document.querySelector('.action-buttons');
+            if (buttons) buttons.style.display = 'none';
+
+            html2pdf().set(opt).from(element).save().then(() => {
+                if (buttons) buttons.style.display = 'flex';
+            });
+        }
+
+    </script>
+
+    <style>
+        .invoice-notice-section {
+            background: #e0f2fe;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: center;
+            font-size: 14px;
+            color: #1e40af;
+        }
+
+        .invoice-notice.edit-mode {
+            background: #e0f2fe;
+            border-color: #1e3a8a;
+        }
+
+        .form-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .form-buttons .btn {
+            flex: 1;
+        }
+
+        .btn-disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .submitted-info {
+            margin-top: 8px;
+        }
+    </style>
+</body>
+</html>
