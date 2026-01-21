@@ -341,6 +341,8 @@ def resend_verification():
         flash('Email already verified. Please login.', 'success')
         return redirect(url_for('admin_login'))
 
+    conn.close()
+
     # Store in session for the verification page
     session['pending_verification_email'] = email
 
