@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Profile - Guest Check-in System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="profile-page">
+    <div class="profile-container">
+        <div class="profile-header">
+            <a href="{{ url_for('admin_dashboard') }}" class="back-link">
+                <svg viewBox="0 0 24 24" width="20" height="20"><path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Back to Dashboard
+            </a>
+            <h1>My Profile</h1>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="profile-grid">
+            <!-- Profile Information Card -->
+            <div class="profile-card">
+                <div class="card-header">
+                    <h2>Profile Information</h2>
+                </div>
+                <form method="POST" action="{{ url_for('admin_profile_update') }}" class="profile-form">
+                    <div class="form-section">
+                        <h3>Personal Details</h3>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="name">First Name</label>
+                                <input type="text" id="name" name="name" value="{{ host.name or '' }}" placeholder="Your first name">
+                            </div>
+                            <div class="form-group">
+                                <label for="surname">Last Name</label>
+                                <input type="text" id="surname" name="surname" value="{{ host.surname or '' }}" placeholder="Your last name">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="email">Email Address</label>
+                            <input type="email" id="email" value="{{ host.email }}" disabled class="disabled">
+                            <small class="form-hint">Email cannot be changed</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="phone">Phone Number</label>
+                            <input type="tel" id="phone" name="phone" value="{{ host.phone or '' }}" placeholder="+48 123 456 789">
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Business Details</h3>
+                        <div class="form-group">
+                            <label for="company_name">Company Name</label>
+                            <input type="text" id="company_name" name="company_name" value="{{ host.company_name or '' }}" placeholder="Your company name (if applicable)">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="tax_id">Tax ID (NIP)</label>
+                                <input type="text" id="tax_id" name="tax_id" value="{{ host.tax_id or '' }}" placeholder="1234567890">
+                            </div>
+                            <div class="form-group">
+                                <label for="vat_eu">VAT EU</label>
+                                <input type="text" id="vat_eu" name="vat_eu" value="{{ host.vat_eu or '' }}" placeholder="PL1234567890">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Address</h3>
+                        <div class="form-group">
+                            <label for="address_street">Street Address</label>
+                            <input type="text" id="address_street" name="address_street" value="{{ host.address_street or '' }}" placeholder="ul. Example 123/45">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="address_city">City</label>
+                                <input type="text" id="address_city" name="address_city" value="{{ host.address_city or '' }}" placeholder="Warsaw">
+                            </div>
+                            <div class="form-group">
+                                <label for="address_postal">Postal Code</label>
+                                <input type="text" id="address_postal" name="address_postal" value="{{ host.address_postal or '' }}" placeholder="00-001">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="address_country">Country</label>
+                            <select id="address_country" name="address_country">
+                                <option value="PL" {{ 'selected' if host.address_country == 'PL' or not host.address_country }}>Poland</option>
+                                <option value="DE" {{ 'selected' if host.address_country == 'DE' }}>Germany</option>
+                                <option value="AT" {{ 'selected' if host.address_country == 'AT' }}>Austria</option>
+                                <option value="CZ" {{ 'selected' if host.address_country == 'CZ' }}>Czech Republic</option>
+                                <option value="SK" {{ 'selected' if host.address_country == 'SK' }}>Slovakia</option>
+                                <option value="other" {{ 'selected' if host.address_country not in ['PL', 'DE', 'AT', 'CZ', 'SK', None, ''] }}>Other</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Account Info Card -->
+            <div class="profile-card account-card">
+                <div class="card-header">
+                    <h2>Account</h2>
+                </div>
+                <div class="account-info-section">
+                    <div class="info-item">
+                        <span class="info-label">Account Type</span>
+                        <span class="info-value">{{ host.business_type|capitalize if host.business_type else 'Individual' }}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Current Plan</span>
+                        <span class="info-value plan-badge plan-{{ host.plan or 'free_trial' }}">
+                            {% if host.plan == 'standard' %}Standard
+                            {% elif host.plan == 'pro' %}Pro
+                            {% elif host.plan == 'enterprise' %}Enterprise
+                            {% else %}Free Trial{% endif %}
+                        </span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Member Since</span>
+                        <span class="info-value">{{ host.created_at[:10] if host.created_at else 'Unknown' }}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Last Login</span>
+                        <span class="info-value">{{ host.last_login_at[:10] if host.last_login_at else 'Never' }}</span>
+                    </div>
+                </div>
+
+                <div class="danger-zone">
+                    <h3>Danger Zone</h3>
+                    <p>Once you delete your account, there is no going back. All your data, reservations, and invoices will be permanently deleted.</p>
+                    <button type="button" class="btn btn-danger" onclick="showDeleteModal()">Delete Account</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Account Modal -->
+    <div class="modal-overlay" id="delete-modal" style="display: none;">
+        <div class="modal delete-modal">
+            <div class="modal-header danger">
+                <h2>Delete Account</h2>
+                <button class="modal-close" onclick="hideDeleteModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="delete-step-1">
+                    <div class="warning-box">
+                        <svg viewBox="0 0 24 24" width="48" height="48">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" fill="#FEE2E2" stroke="#DC2626" stroke-width="2"/>
+                            <line x1="12" y1="9" x2="12" y2="13" stroke="#DC2626" stroke-width="2" stroke-linecap="round"/>
+                            <line x1="12" y1="17" x2="12.01" y2="17" stroke="#DC2626" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                        <h3>Are you absolutely sure?</h3>
+                        <p>This action <strong>cannot be undone</strong>. This will permanently delete your account and remove all associated data including:</p>
+                        <ul>
+                            <li>All reservations</li>
+                            <li>All generated invoices</li>
+                            <li>Building access codes</li>
+                            <li>Invoice settings</li>
+                        </ul>
+                    </div>
+                    <p>To continue, we'll send a verification code to <strong>{{ host.email }}</strong></p>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-secondary" onclick="hideDeleteModal()">Cancel</button>
+                        <button type="button" class="btn btn-danger" onclick="requestDeleteCode()" id="request-code-btn">
+                            Send Verification Code
+                        </button>
+                    </div>
+                </div>
+
+                <div id="delete-step-2" style="display: none;">
+                    <p>We've sent a 6-digit code to <strong>{{ host.email }}</strong></p>
+                    <p>Enter the code to confirm account deletion:</p>
+                    <form method="POST" action="{{ url_for('admin_profile_delete') }}" id="delete-form">
+                        <div class="code-input-container">
+                            <input type="text" name="code" id="delete-code" maxlength="6" pattern="[0-9]{6}" inputmode="numeric" placeholder="000000" autocomplete="off" required>
+                        </div>
+                        <p class="code-hint">Code expires in 1 hour</p>
+                        <div class="modal-actions">
+                            <button type="button" class="btn btn-secondary" onclick="hideDeleteModal()">Cancel</button>
+                            <button type="submit" class="btn btn-danger" id="confirm-delete-btn">
+                                Delete My Account Forever
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .profile-page {
+            min-height: 100vh;
+            background: #F3F4F6;
+            padding: 2rem;
+        }
+        .profile-container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .profile-header {
+            margin-bottom: 2rem;
+        }
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #6B7280;
+            text-decoration: none;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+        .back-link:hover { color: #3B82F6; }
+        .profile-header h1 {
+            font-size: 1.75rem;
+            color: #1F2937;
+            margin: 0;
+        }
+        .alert {
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+        }
+        .alert-success { background: #D1FAE5; color: #065F46; border: 1px solid #A7F3D0; }
+        .alert-error { background: #FEE2E2; color: #991B1B; border: 1px solid #FECACA; }
+
+        .profile-grid {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 1.5rem;
+        }
+        @media (max-width: 900px) {
+            .profile-grid { grid-template-columns: 1fr; }
+        }
+
+        .profile-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .card-header {
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid #E5E7EB;
+        }
+        .card-header h2 {
+            margin: 0;
+            font-size: 1.1rem;
+            color: #1F2937;
+        }
+
+        .profile-form { padding: 1.5rem; }
+        .form-section {
+            margin-bottom: 2rem;
+        }
+        .form-section:last-of-type { margin-bottom: 0; }
+        .form-section h3 {
+            font-size: 0.9rem;
+            color: #6B7280;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin: 0 0 1rem 0;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #E5E7EB;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        .form-group label {
+            display: block;
+            font-weight: 500;
+            font-size: 0.9rem;
+            color: #374151;
+            margin-bottom: 0.4rem;
+        }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 0.65rem 0.9rem;
+            font-size: 0.95rem;
+            border: 1px solid #D1D5DB;
+            border-radius: 8px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .form-group input:focus, .form-group select:focus {
+            border-color: #3B82F6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+            outline: none;
+        }
+        .form-group input.disabled {
+            background: #F3F4F6;
+            color: #6B7280;
+            cursor: not-allowed;
+        }
+        .form-hint {
+            color: #9CA3AF;
+            font-size: 0.8rem;
+            margin-top: 0.25rem;
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+        @media (max-width: 600px) {
+            .form-row { grid-template-columns: 1fr; }
+        }
+        .form-actions {
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid #E5E7EB;
+        }
+        .btn {
+            padding: 0.7rem 1.5rem;
+            font-size: 0.95rem;
+            font-weight: 500;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+        }
+        .btn-primary {
+            background: #3B82F6;
+            color: white;
+        }
+        .btn-primary:hover { background: #2563EB; }
+        .btn-secondary {
+            background: #F3F4F6;
+            color: #374151;
+            border: 1px solid #D1D5DB;
+        }
+        .btn-secondary:hover { background: #E5E7EB; }
+        .btn-danger {
+            background: #DC2626;
+            color: white;
+        }
+        .btn-danger:hover { background: #B91C1C; }
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        /* Account Card */
+        .account-card { height: fit-content; }
+        .account-info-section {
+            padding: 1.5rem;
+            border-bottom: 1px solid #E5E7EB;
+        }
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.6rem 0;
+        }
+        .info-item:not(:last-child) {
+            border-bottom: 1px solid #F3F4F6;
+        }
+        .info-label {
+            color: #6B7280;
+            font-size: 0.9rem;
+        }
+        .info-value {
+            color: #1F2937;
+            font-weight: 500;
+        }
+        .plan-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+        }
+        .plan-free_trial { background: #E5E7EB; color: #374151; }
+        .plan-standard { background: #DBEAFE; color: #1E40AF; }
+        .plan-pro { background: #D1FAE5; color: #065F46; }
+        .plan-enterprise { background: #FEF3C7; color: #92400E; }
+
+        /* Danger Zone */
+        .danger-zone {
+            padding: 1.5rem;
+            background: #FEF2F2;
+        }
+        .danger-zone h3 {
+            color: #991B1B;
+            font-size: 0.9rem;
+            margin: 0 0 0.75rem 0;
+        }
+        .danger-zone p {
+            color: #7F1D1D;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            margin: 0 0 1rem 0;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal {
+            background: white;
+            border-radius: 12px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid #E5E7EB;
+        }
+        .modal-header.danger {
+            background: #FEF2F2;
+            border-bottom-color: #FECACA;
+        }
+        .modal-header.danger h2 { color: #991B1B; }
+        .modal-header h2 {
+            margin: 0;
+            font-size: 1.1rem;
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: #6B7280;
+            cursor: pointer;
+            line-height: 1;
+        }
+        .modal-close:hover { color: #1F2937; }
+        .modal-body {
+            padding: 1.5rem;
+        }
+        .modal-actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+            margin-top: 1.5rem;
+        }
+
+        .warning-box {
+            text-align: center;
+            padding: 1.5rem;
+            background: #FEF2F2;
+            border: 1px solid #FECACA;
+            border-radius: 10px;
+            margin-bottom: 1.5rem;
+        }
+        .warning-box h3 {
+            color: #991B1B;
+            margin: 1rem 0 0.5rem;
+        }
+        .warning-box p {
+            color: #7F1D1D;
+            margin: 0 0 1rem;
+        }
+        .warning-box ul {
+            text-align: left;
+            color: #7F1D1D;
+            margin: 0;
+            padding-left: 1.5rem;
+        }
+        .warning-box li { margin: 0.25rem 0; }
+
+        .code-input-container {
+            display: flex;
+            justify-content: center;
+            margin: 1.5rem 0;
+        }
+        .code-input-container input {
+            width: 180px;
+            text-align: center;
+            font-size: 2rem;
+            font-weight: 600;
+            letter-spacing: 0.5rem;
+            padding: 0.75rem 1rem;
+            border: 2px solid #FECACA;
+            border-radius: 10px;
+        }
+        .code-input-container input:focus {
+            border-color: #DC2626;
+            box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+            outline: none;
+        }
+        .code-hint {
+            text-align: center;
+            color: #6B7280;
+            font-size: 0.85rem;
+        }
+
+        .delete-modal .modal-body p {
+            color: #4B5563;
+            line-height: 1.6;
+        }
+    </style>
+
+    <script>
+        function showDeleteModal() {
+            document.getElementById('delete-modal').style.display = 'flex';
+            document.getElementById('delete-step-1').style.display = 'block';
+            document.getElementById('delete-step-2').style.display = 'none';
+        }
+
+        function hideDeleteModal() {
+            document.getElementById('delete-modal').style.display = 'none';
+        }
+
+        async function requestDeleteCode() {
+            const btn = document.getElementById('request-code-btn');
+            btn.disabled = true;
+            btn.textContent = 'Sending...';
+
+            try {
+                const response = await fetch('{{ url_for("admin_profile_request_delete") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    document.getElementById('delete-step-1').style.display = 'none';
+                    document.getElementById('delete-step-2').style.display = 'block';
+                    document.getElementById('delete-code').focus();
+                } else {
+                    alert(data.error || 'Failed to send verification code');
+                    btn.disabled = false;
+                    btn.textContent = 'Send Verification Code';
+                }
+            } catch (error) {
+                alert('An error occurred. Please try again.');
+                btn.disabled = false;
+                btn.textContent = 'Send Verification Code';
+            }
+        }
+
+        // Format code input (numbers only)
+        document.getElementById('delete-code').addEventListener('input', function(e) {
+            this.value = this.value.replace(/[^0-9]/g, '').slice(0, 6);
+        });
+
+        // Close modal on overlay click
+        document.getElementById('delete-modal').addEventListener('click', function(e) {
+            if (e.target === this) hideDeleteModal();
+        });
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') hideDeleteModal();
+        });
+    </script>
+</body>
+</html>

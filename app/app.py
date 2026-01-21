@@ -582,6 +582,216 @@ def admin_logout():
     return redirect(url_for('admin_login'))
 
 
+# ============== PROFILE ROUTES ==============
+
+@app.route('/admin/profile')
+@login_required
+def admin_profile():
+    """User profile page."""
+    host_id = get_current_host_id()
+
+    conn = get_db()
+    if DB_TYPE == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('SELECT * FROM hosts WHERE id = %s', (host_id,))
+    else:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM hosts WHERE id = ?', (host_id,))
+
+    host = cursor.fetchone()
+    conn.close()
+
+    host_dict = dict(host) if host else {}
+    return render_template('profile.html', host=host_dict)
+
+
+@app.route('/admin/profile', methods=['POST'])
+@login_required
+def admin_profile_update():
+    """Update user profile."""
+    host_id = get_current_host_id()
+    now = datetime.now().isoformat()
+
+    name = request.form.get('name', '').strip()
+    surname = request.form.get('surname', '').strip()
+    phone = request.form.get('phone', '').strip()
+    company_name = request.form.get('company_name', '').strip()
+    tax_id = request.form.get('tax_id', '').strip()
+    vat_eu = request.form.get('vat_eu', '').strip() or None
+    address_street = request.form.get('address_street', '').strip()
+    address_city = request.form.get('address_city', '').strip()
+    address_postal = request.form.get('address_postal', '').strip()
+    address_country = request.form.get('address_country', 'PL').strip()
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    execute_query(cursor, '''
+        UPDATE hosts SET name = ?, surname = ?, phone = ?, company_name = ?,
+                        tax_id = ?, vat_eu = ?, address_street = ?, address_city = ?,
+                        address_postal = ?, address_country = ?, updated_at = ?
+        WHERE id = ?
+    ''', (name, surname, phone, company_name, tax_id, vat_eu, address_street,
+          address_city, address_postal, address_country, now, host_id))
+
+    conn.commit()
+    conn.close()
+
+    # Update session name
+    session['host_name'] = name or session.get('email', '').split('@')[0]
+
+    flash('Profile updated successfully', 'success')
+    return redirect(url_for('admin_profile'))
+
+
+@app.route('/admin/profile/request-delete', methods=['POST'])
+@login_required
+def admin_profile_request_delete():
+    """Request account deletion - sends verification code."""
+    host_id = get_current_host_id()
+    email = session.get('email')
+
+    if not email:
+        return jsonify({'success': False, 'error': 'No email found'}), 400
+
+    # Generate 6-digit deletion code
+    deletion_code = generate_verification_code()
+    code_expires = (datetime.now() + timedelta(hours=1)).isoformat()
+    now = datetime.now().isoformat()
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Store the deletion code in password_reset fields (repurposing them)
+    execute_query(cursor, '''
+        UPDATE hosts SET password_reset_token = ?, password_reset_expires = ?, updated_at = ?
+        WHERE id = ?
+    ''', (deletion_code, code_expires, now, host_id))
+
+    conn.commit()
+    conn.close()
+
+    # Send deletion verification email
+    from email_service import send_email
+    subject = f"Account Deletion Code: {deletion_code} - Guest Check-in System"
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="UTF-8"></head>
+    <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 40px 20px;">
+            <tr>
+                <td align="center">
+                    <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 500px; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+                        <tr>
+                            <td style="padding: 40px 40px 20px; text-align: center;">
+                                <div style="background: linear-gradient(135deg, #DC2626 0%, #991B1B 100%); color: white; font-weight: bold; font-size: 24px; padding: 12px 24px; border-radius: 8px; display: inline-block;">
+                                    DELETE
+                                </div>
+                                <h1 style="margin: 20px 0 10px; color: #1f2937; font-size: 24px;">Account Deletion Request</h1>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 0 40px 30px;">
+                                <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin: 0 0 20px;">
+                                    You have requested to delete your account. Enter this code to confirm:
+                                </p>
+                                <div style="text-align: center; margin: 30px 0;">
+                                    <div style="display: inline-block; background: #FEE2E2; padding: 20px 40px; border-radius: 12px; border: 2px dashed #FECACA;">
+                                        <span style="font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #DC2626; font-family: 'Courier New', monospace;">
+                                            {deletion_code}
+                                        </span>
+                                    </div>
+                                </div>
+                                <p style="color: #6b7280; font-size: 14px; line-height: 1.6; margin: 20px 0 0; text-align: center;">
+                                    This code will expire in 1 hour.
+                                </p>
+                                <p style="color: #DC2626; font-size: 14px; line-height: 1.6; margin: 10px 0 0; text-align: center; font-weight: 600;">
+                                    Warning: Account deletion is permanent and cannot be undone.
+                                </p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 20px 40px; background-color: #f9fafb; border-radius: 0 0 12px 12px; border-top: 1px solid #e5e7eb;">
+                                <p style="color: #9ca3af; font-size: 12px; margin: 0; text-align: center;">
+                                    If you didn't request this, please ignore this email and secure your account.
+                                </p>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+    </body>
+    </html>
+    """
+
+    email_result = send_email(email, subject, html_content)
+
+    if email_result.get('success'):
+        return jsonify({'success': True, 'message': 'Verification code sent to your email'})
+    else:
+        return jsonify({'success': False, 'error': 'Failed to send verification email'}), 500
+
+
+@app.route('/admin/profile/delete', methods=['POST'])
+@login_required
+def admin_profile_delete():
+    """Delete account after verification code confirmation."""
+    host_id = get_current_host_id()
+    code = request.form.get('code', '').strip()
+
+    if not code or len(code) != 6 or not code.isdigit():
+        flash('Invalid verification code format', 'error')
+        return redirect(url_for('admin_profile'))
+
+    conn = get_db()
+    if DB_TYPE == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('SELECT password_reset_token, password_reset_expires FROM hosts WHERE id = %s', (host_id,))
+    else:
+        cursor = conn.cursor()
+        cursor.execute('SELECT password_reset_token, password_reset_expires FROM hosts WHERE id = ?', (host_id,))
+
+    host = cursor.fetchone()
+
+    if not host:
+        conn.close()
+        flash('Account not found', 'error')
+        return redirect(url_for('admin_profile'))
+
+    host_dict = dict(host)
+    stored_code = host_dict.get('password_reset_token')
+    expires = host_dict.get('password_reset_expires')
+
+    # Verify code
+    if stored_code != code:
+        conn.close()
+        flash('Invalid verification code', 'error')
+        return redirect(url_for('admin_profile'))
+
+    # Check expiry
+    if expires:
+        expires_dt = datetime.fromisoformat(expires) if isinstance(expires, str) else expires
+        if datetime.now() > expires_dt:
+            conn.close()
+            flash('Verification code has expired. Please request a new one.', 'error')
+            return redirect(url_for('admin_profile'))
+
+    # Delete the account and all related data (cascading)
+    execute_query(cursor, 'DELETE FROM hosts WHERE id = ?', (host_id,))
+    conn.commit()
+    conn.close()
+
+    # Clear session
+    session.clear()
+
+    flash('Your account has been permanently deleted.', 'success')
+    return redirect(url_for('admin_login'))
+
+
 # ============== GUEST ROUTES ==============
 
 @app.route('/guest')
