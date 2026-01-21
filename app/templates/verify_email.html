@@ -15,26 +15,42 @@
                         <path fill="#3B82F6" d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
                     </svg>
                 </div>
-                <h1>Check Your Email</h1>
-                <p>We've sent a verification link to:</p>
+                <h1>Verify Your Email</h1>
+                <p>We've sent a 6-digit code to:</p>
                 <p class="email-address">{{ email }}</p>
             </div>
 
-            <div class="verify-instructions">
-                <p>Click the link in your email to verify your account and complete registration.</p>
-                <p class="hint">The link will expire in 24 hours.</p>
-            </div>
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
 
-            {% if verification_url %}
-            <div class="dev-mode-notice">
-                <p><strong>Didn't receive the email?</strong></p>
-                <p>Check your spam folder, or click below to verify directly:</p>
-                <a href="{{ verification_url }}" class="btn btn-primary btn-full">Verify Email Now</a>
+            <form method="POST" action="{{ url_for('verify_email_code') }}" class="verify-form">
+                <input type="hidden" name="email" value="{{ email }}">
+
+                <div class="code-input-container">
+                    <input type="text" name="code" id="verification-code"
+                           maxlength="6" pattern="[0-9]{6}" inputmode="numeric"
+                           placeholder="000000" autocomplete="one-time-code" required>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-full">Verify</button>
+            </form>
+
+            <div class="help-section">
+                <p><strong>Didn't receive the code?</strong></p>
+                <p>Check your spam folder, or request a new code below.</p>
+
+                <button type="button" id="resend-btn" class="btn btn-secondary btn-full" onclick="resendCode()">
+                    Resend Code
+                </button>
+                <p id="cooldown-msg" class="cooldown-message" style="display: none;"></p>
             </div>
-            {% endif %}
 
             <div class="login-footer">
-                <p>Didn't receive the email? <a href="{{ url_for('resend_verification', email=email) }}">Resend</a></p>
                 <p><a href="{{ url_for('register') }}">Use a different email</a></p>
             </div>
         </div>
@@ -50,35 +66,71 @@
             font-size: 1.1rem;
             margin-top: 0.5rem;
         }
-        .verify-instructions {
-            background: #F3F4F6;
+        .verify-form {
+            margin: 1.5rem 0;
+        }
+        .code-input-container {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 1rem;
+        }
+        .code-input-container input {
+            width: 180px;
+            text-align: center;
+            font-size: 2rem;
+            font-weight: 600;
+            letter-spacing: 0.5rem;
+            padding: 0.75rem 1rem;
+            border: 2px solid #D1D5DB;
+            border-radius: 10px;
+            transition: border-color 0.2s;
+        }
+        .code-input-container input:focus {
+            outline: none;
+            border-color: #3B82F6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        .code-input-container input::placeholder {
+            color: #D1D5DB;
+            letter-spacing: 0.5rem;
+        }
+        .help-section {
+            background: #EFF6FF;
+            border: 1px solid #BFDBFE;
             padding: 1.25rem;
             border-radius: 10px;
             margin: 1.5rem 0;
             text-align: center;
         }
-        .verify-instructions p {
-            margin: 0;
-            color: #4B5563;
-            font-size: 0.95rem;
+        .help-section p {
+            margin: 0 0 0.75rem 0;
+            font-size: 0.9rem;
+            color: #1E40AF;
         }
-        .verify-instructions .hint {
+        .help-section .btn {
             margin-top: 0.5rem;
+        }
+        .btn-secondary {
+            background: #fff;
+            color: #3B82F6;
+            border: 1px solid #3B82F6;
+        }
+        .btn-secondary:hover:not(:disabled) {
+            background: #EFF6FF;
+        }
+        .btn-secondary:disabled {
+            background: #F3F4F6;
+            color: #9CA3AF;
+            border-color: #D1D5DB;
+            cursor: not-allowed;
+        }
+        .cooldown-message {
+            margin-top: 0.75rem;
             font-size: 0.85rem;
             color: #6B7280;
         }
-        .dev-mode-notice {
-            background: #FEF3C7;
-            border: 1px solid #F59E0B;
-            padding: 1.25rem;
-            border-radius: 10px;
-            margin: 1.5rem 0;
-            text-align: center;
-        }
-        .dev-mode-notice p {
-            margin: 0 0 0.75rem 0;
-            font-size: 0.9rem;
-            color: #92400E;
+        .cooldown-message.error {
+            color: #DC2626;
         }
         .login-footer {
             margin-top: 1.5rem;
@@ -86,6 +138,128 @@
         .login-footer p {
             margin: 0.5rem 0;
         }
+        .alert {
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+        }
+        .alert-error {
+            background: #FEE2E2;
+            color: #DC2626;
+            border: 1px solid #FECACA;
+        }
+        .alert-success {
+            background: #D1FAE5;
+            color: #059669;
+            border: 1px solid #A7F3D0;
+        }
     </style>
+
+    <script>
+        // Rate limiting configuration
+        const COOLDOWNS = [30, 30, 30, 30, 30, 60, 120, 300, 600]; // seconds
+        const LOCKOUT_TIME = 6 * 60 * 60; // 6 hours in seconds
+        const STORAGE_KEY = 'resend_attempts_{{ email | replace("@", "_at_") | replace(".", "_dot_") }}';
+
+        function getResendData() {
+            const data = localStorage.getItem(STORAGE_KEY);
+            if (!data) return { attempts: 0, lastAttempt: 0, lockedUntil: 0 };
+            return JSON.parse(data);
+        }
+
+        function saveResendData(data) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        }
+
+        function getCooldownSeconds(attempts) {
+            if (attempts >= COOLDOWNS.length) return -1; // Locked out
+            return COOLDOWNS[attempts];
+        }
+
+        function updateUI() {
+            const data = getResendData();
+            const now = Math.floor(Date.now() / 1000);
+            const btn = document.getElementById('resend-btn');
+            const msg = document.getElementById('cooldown-msg');
+
+            // Check if locked out
+            if (data.lockedUntil > now) {
+                btn.disabled = true;
+                const remaining = data.lockedUntil - now;
+                const hours = Math.floor(remaining / 3600);
+                const minutes = Math.floor((remaining % 3600) / 60);
+                msg.textContent = `Too many attempts. Try again in ${hours}h ${minutes}m`;
+                msg.className = 'cooldown-message error';
+                msg.style.display = 'block';
+                return;
+            }
+
+            // Check if in cooldown
+            if (data.attempts > 0 && data.lastAttempt > 0) {
+                const cooldown = getCooldownSeconds(data.attempts - 1);
+                const elapsed = now - data.lastAttempt;
+
+                if (elapsed < cooldown) {
+                    btn.disabled = true;
+                    const remaining = cooldown - elapsed;
+                    msg.textContent = `You can resend in ${remaining} seconds`;
+                    msg.className = 'cooldown-message';
+                    msg.style.display = 'block';
+                    return;
+                }
+            }
+
+            // Check if next attempt would lock out
+            if (data.attempts >= COOLDOWNS.length) {
+                // Reset after lockout period
+                if (data.lockedUntil && now > data.lockedUntil) {
+                    saveResendData({ attempts: 0, lastAttempt: 0, lockedUntil: 0 });
+                }
+            }
+
+            btn.disabled = false;
+            msg.style.display = 'none';
+        }
+
+        function resendCode() {
+            const data = getResendData();
+            const now = Math.floor(Date.now() / 1000);
+
+            // Check if would exceed max attempts
+            if (data.attempts >= COOLDOWNS.length) {
+                data.lockedUntil = now + LOCKOUT_TIME;
+                saveResendData(data);
+                updateUI();
+                return;
+            }
+
+            // Record attempt
+            data.attempts++;
+            data.lastAttempt = now;
+
+            // Check if this was the last allowed attempt
+            if (data.attempts >= COOLDOWNS.length) {
+                data.lockedUntil = now + LOCKOUT_TIME;
+            }
+
+            saveResendData(data);
+
+            // Redirect to resend endpoint
+            window.location.href = '{{ url_for("resend_verification", email=email) }}';
+        }
+
+        // Update UI every second
+        setInterval(updateUI, 1000);
+        updateUI();
+
+        // Auto-focus the code input
+        document.getElementById('verification-code').focus();
+
+        // Format code input (numbers only)
+        document.getElementById('verification-code').addEventListener('input', function(e) {
+            this.value = this.value.replace(/[^0-9]/g, '').slice(0, 6);
+        });
+    </script>
 </body>
 </html>

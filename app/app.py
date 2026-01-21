@@ -19,8 +19,14 @@ from database import (
     DB_TYPE, placeholder, placeholders, init_db, seed_demo_data
 )
 from email_service import send_verification_email
+import random
 
 app = Flask(__name__)
+
+
+def generate_verification_code():
+    """Generate a 6-digit verification code."""
+    return str(random.randint(100000, 999999))
 app.secret_key = os.environ.get('SECRET_KEY', 'demo-secret-key-2025')
 
 # Initialize database tables on startup
@@ -184,9 +190,9 @@ def register_post():
         flash('An account with this email already exists', 'error')
         return redirect(url_for('register'))
 
-    # Generate verification token
-    verification_token = secrets.token_urlsafe(32)
-    token_expires = (datetime.now() + timedelta(hours=24)).isoformat()
+    # Generate 6-digit verification code
+    verification_code = generate_verification_code()
+    code_expires = (datetime.now() + timedelta(hours=24)).isoformat()
 
     # Create new host (unverified)
     password_hash = generate_password_hash(password)
@@ -198,7 +204,7 @@ def register_post():
                               email_verification_expires, created_at, updated_at)
             VALUES (%s, %s, FALSE, %s, %s, %s, %s)
             RETURNING id
-        ''', (email, password_hash, verification_token, token_expires, now, now))
+        ''', (email, password_hash, verification_code, code_expires, now, now))
         result = cursor.fetchone()
         host_id = result['id'] if isinstance(result, dict) else result[0]
     else:
@@ -206,21 +212,17 @@ def register_post():
             INSERT INTO hosts (email, password_hash, email_verified, email_verification_token,
                               email_verification_expires, created_at, updated_at)
             VALUES (?, ?, 0, ?, ?, ?, ?)
-        ''', (email, password_hash, verification_token, token_expires, now, now))
+        ''', (email, password_hash, verification_code, code_expires, now, now))
         host_id = cursor.lastrowid
 
     conn.commit()
     conn.close()
 
-    # Generate verification URL
-    verification_url = url_for('verify_email_confirm', token=verification_token, _external=True)
-
-    # Send verification email
-    email_result = send_verification_email(email, verification_url)
+    # Send verification email with code
+    email_result = send_verification_email(email, verification_code)
 
     # Store email in session for verification page
     session['pending_verification_email'] = email
-    session['verification_token'] = verification_token  # Fallback for dev mode display
     session['email_sent'] = email_result.get('success', False)
 
     return redirect(url_for('verify_email_pending'))
@@ -229,53 +231,72 @@ def register_post():
 @app.route('/verify-email')
 def verify_email_pending():
     """Show verification pending page."""
-    email = session.get('pending_verification_email')
-    token = session.get('verification_token')  # For dev mode
+    email = session.get('pending_verification_email') or request.args.get('email')
 
     if not email:
         return redirect(url_for('register'))
 
-    # Generate verification URL for dev mode display
-    verification_url = url_for('verify_email_confirm', token=token, _external=True) if token else None
+    # Store in session if from query param
+    session['pending_verification_email'] = email
 
-    return render_template('verify_email.html', email=email, verification_url=verification_url)
+    return render_template('verify_email.html', email=email)
 
 
-@app.route('/verify-email/<token>')
-def verify_email_confirm(token):
-    """Confirm email verification."""
+@app.route('/verify-email/code', methods=['POST'])
+def verify_email_code():
+    """Verify email using 6-digit code."""
+    email = request.form.get('email', '').strip().lower()
+    code = request.form.get('code', '').strip()
+
+    if not email or not code:
+        flash('Please enter the verification code', 'error')
+        return redirect(url_for('verify_email_pending', email=email))
+
+    if len(code) != 6 or not code.isdigit():
+        flash('Invalid code format. Please enter a 6-digit code.', 'error')
+        return redirect(url_for('verify_email_pending', email=email))
+
     conn = get_db()
     if DB_TYPE == 'postgresql':
         from psycopg2.extras import RealDictCursor
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         cursor.execute('''
-            SELECT id, email, email_verification_expires FROM hosts
-            WHERE email_verification_token = %s
-        ''', (token,))
+            SELECT id, email, email_verification_token, email_verification_expires FROM hosts
+            WHERE LOWER(email) = %s
+        ''', (email,))
     else:
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT id, email, email_verification_expires FROM hosts
-            WHERE email_verification_token = ?
-        ''', (token,))
+            SELECT id, email, email_verification_token, email_verification_expires FROM hosts
+            WHERE LOWER(email) = ?
+        ''', (email,))
 
     host = cursor.fetchone()
 
     if not host:
         conn.close()
-        flash('Invalid or expired verification link', 'error')
+        flash('Email not found. Please register first.', 'error')
         return redirect(url_for('register'))
 
     host_dict = dict(host)
+    stored_code = host_dict.get('email_verification_token')
     expires = host_dict.get('email_verification_expires')
 
-    # Check if token expired
+    # Check if code matches
+    if stored_code != code:
+        conn.close()
+        flash('Invalid verification code. Please try again.', 'error')
+        session['pending_verification_email'] = email
+        return redirect(url_for('verify_email_pending'))
+
+    # Check if code expired
     if expires:
         expires_dt = datetime.fromisoformat(expires) if isinstance(expires, str) else expires
         if datetime.now() > expires_dt:
             conn.close()
-            flash('Verification link has expired. Please register again.', 'error')
-            return redirect(url_for('register'))
+            flash('Verification code has expired. Please request a new one.', 'error')
+            session['pending_verification_email'] = email
+            return redirect(url_for('verify_email_pending'))
 
     # Mark email as verified
     now = datetime.now().isoformat()
@@ -297,7 +318,6 @@ def verify_email_confirm(token):
 
     # Clear session verification data
     session.pop('pending_verification_email', None)
-    session.pop('verification_token', None)
 
     # Log the user in
     session['host_id'] = host_dict['id']
@@ -349,9 +369,9 @@ def resend_verification():
     # Store in session for the verification page
     session['pending_verification_email'] = email
 
-    # Generate new token
-    verification_token = secrets.token_urlsafe(32)
-    token_expires = (datetime.now() + timedelta(hours=24)).isoformat()
+    # Generate new 6-digit code
+    verification_code = generate_verification_code()
+    code_expires = (datetime.now() + timedelta(hours=24)).isoformat()
     now = datetime.now().isoformat()
 
     conn = get_db()
@@ -361,30 +381,27 @@ def resend_verification():
             UPDATE hosts SET email_verification_token = %s,
                             email_verification_expires = %s, updated_at = %s
             WHERE LOWER(email) = %s
-        ''', (verification_token, token_expires, now, email))
+        ''', (verification_code, code_expires, now, email))
     else:
         cursor = conn.cursor()
         cursor.execute('''
             UPDATE hosts SET email_verification_token = ?,
                             email_verification_expires = ?, updated_at = ?
             WHERE LOWER(email) = ?
-        ''', (verification_token, token_expires, now, email))
+        ''', (verification_code, code_expires, now, email))
 
     conn.commit()
     conn.close()
 
-    # Generate verification URL and send email
-    verification_url = url_for('verify_email_confirm', token=verification_token, _external=True)
-    email_result = send_verification_email(email, verification_url)
+    # Send verification email with new code
+    email_result = send_verification_email(email, verification_code)
 
-    # Update session with new token
-    session['verification_token'] = verification_token
     session['email_sent'] = email_result.get('success', False)
 
     if email_result.get('success'):
-        flash('Verification link resent! Check your email.', 'success')
+        flash('New verification code sent! Check your email.', 'success')
     else:
-        flash('Could not send email. Use the link below.', 'error')
+        flash('Could not send email. Please try again later.', 'error')
 
     return redirect(url_for('verify_email_pending'))
 

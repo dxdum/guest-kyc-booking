@@ -78,18 +78,18 @@ def send_email(to_email, subject, html_content, text_content=None):
         return {'success': False, 'error': f'Email error: {str(e)}'}
 
 
-def send_verification_email(to_email, verification_url, user_name=None):
+def send_verification_email(to_email, verification_code, user_name=None):
     """
-    Send email verification link to new user.
+    Send email verification code to new user.
 
     Args:
         to_email: Recipient email address
-        verification_url: Full URL for email verification
+        verification_code: 6-digit verification code
         user_name: Optional user name for personalization
     """
     greeting = f"Hi {user_name}," if user_name else "Hi,"
 
-    subject = "Verify your email - Guest Check-in System"
+    subject = f"Your verification code: {verification_code} - Guest Check-in System"
 
     html_content = f"""
     <!DOCTYPE html>
@@ -118,18 +118,20 @@ def send_verification_email(to_email, verification_url, user_name=None):
                                 <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin: 0 0 20px;">
                                     {greeting}
                                 </p>
-                                <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin: 0 0 30px;">
-                                    Thanks for signing up for Guest Check-in System. Please verify your email address by clicking the button below:
+                                <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin: 0 0 20px;">
+                                    Thanks for signing up for Guest Check-in System. Enter this code to verify your email:
                                 </p>
                                 <div style="text-align: center; margin: 30px 0;">
-                                    <a href="{verification_url}" style="display: inline-block; background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%); color: white; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 16px;">
-                                        Verify Email Address
-                                    </a>
+                                    <div style="display: inline-block; background: #F3F4F6; padding: 20px 40px; border-radius: 12px; border: 2px dashed #D1D5DB;">
+                                        <span style="font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #1F2937; font-family: 'Courier New', monospace;">
+                                            {verification_code}
+                                        </span>
+                                    </div>
                                 </div>
-                                <p style="color: #6b7280; font-size: 14px; line-height: 1.6; margin: 20px 0 0;">
-                                    This link will expire in 24 hours.
+                                <p style="color: #6b7280; font-size: 14px; line-height: 1.6; margin: 20px 0 0; text-align: center;">
+                                    This code will expire in 24 hours.
                                 </p>
-                                <p style="color: #6b7280; font-size: 14px; line-height: 1.6; margin: 10px 0 0;">
+                                <p style="color: #6b7280; font-size: 14px; line-height: 1.6; margin: 10px 0 0; text-align: center;">
                                     If you didn't create an account, you can safely ignore this email.
                                 </p>
                             </td>
@@ -153,11 +155,11 @@ def send_verification_email(to_email, verification_url, user_name=None):
     text_content = f"""
     {greeting}
 
-    Thanks for signing up for Guest Check-in System. Please verify your email address by clicking the link below:
+    Thanks for signing up for Guest Check-in System. Enter this code to verify your email:
 
-    {verification_url}
+    {verification_code}
 
-    This link will expire in 24 hours.
+    This code will expire in 24 hours.
 
     If you didn't create an account, you can safely ignore this email.
 
