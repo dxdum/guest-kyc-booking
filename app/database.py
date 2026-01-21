@@ -387,6 +387,47 @@ CREATE INDEX IF NOT EXISTS idx_properties_host ON properties(host_id);
 '''
 
 
+def run_migrations():
+    """Run database migrations to add new columns to existing tables."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # List of migrations: (table, column, type_postgresql, type_sqlite, default)
+    migrations = [
+        ('hosts', 'surname', 'VARCHAR(255)', 'TEXT', None),
+        ('hosts', 'plan', 'VARCHAR(50)', 'TEXT', "'free_trial'"),
+        ('hosts', 'plan_started_at', 'TIMESTAMP', 'TEXT', None),
+    ]
+
+    for table, column, pg_type, sqlite_type, default in migrations:
+        try:
+            if DB_TYPE == 'postgresql':
+                # Check if column exists
+                cursor.execute('''
+                    SELECT column_name FROM information_schema.columns
+                    WHERE table_name = %s AND column_name = %s
+                ''', (table, column))
+                if not cursor.fetchone():
+                    col_type = pg_type
+                    default_clause = f" DEFAULT {default}" if default else ""
+                    cursor.execute(f'ALTER TABLE {table} ADD COLUMN {column} {col_type}{default_clause}')
+                    print(f"Added column {table}.{column}")
+            else:
+                # SQLite: Check if column exists
+                cursor.execute(f"PRAGMA table_info({table})")
+                columns = [row[1] for row in cursor.fetchall()]
+                if column not in columns:
+                    col_type = sqlite_type
+                    default_clause = f" DEFAULT {default}" if default else ""
+                    cursor.execute(f'ALTER TABLE {table} ADD COLUMN {column} {col_type}{default_clause}')
+                    print(f"Added column {table}.{column}")
+        except Exception as e:
+            print(f"Migration warning for {table}.{column}: {e}")
+
+    conn.commit()
+    conn.close()
+
+
 def init_db():
     """Initialize the database with schema."""
     conn = get_db()
@@ -405,6 +446,9 @@ def init_db():
     conn.commit()
     conn.close()
     print(f"Database initialized ({DB_TYPE})")
+
+    # Run migrations to add any new columns
+    run_migrations()
 
 
 def seed_demo_data(host_id=None):
