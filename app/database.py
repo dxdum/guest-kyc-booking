@@ -100,10 +100,15 @@ CREATE TABLE IF NOT EXISTS hosts (
 
     -- Profile
     name VARCHAR(255),
+    surname VARCHAR(255),
     phone VARCHAR(50),
 
     -- Business type: 'individual' or 'company'
     business_type VARCHAR(20) DEFAULT 'individual',
+
+    -- Subscription plan
+    plan VARCHAR(50) DEFAULT 'free_trial',
+    plan_started_at TIMESTAMP,
 
     -- Business details (for invoices)
     company_name VARCHAR(255),
@@ -240,10 +245,15 @@ CREATE TABLE IF NOT EXISTS hosts (
 
     -- Profile
     name TEXT,
+    surname TEXT,
     phone TEXT,
 
     -- Business type: 'individual' or 'company'
     business_type TEXT DEFAULT 'individual',
+
+    -- Subscription plan
+    plan TEXT DEFAULT 'free_trial',
+    plan_started_at TEXT,
 
     -- Business details (for invoices)
     company_name TEXT,

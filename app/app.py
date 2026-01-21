@@ -324,7 +324,6 @@ def verify_email_code():
     session['email'] = host_dict['email']
     session['host_name'] = host_dict['email'].split('@')[0]
 
-    flash('Email verified successfully! Complete your account setup.', 'success')
     return redirect(url_for('admin_onboarding'))
 
 
@@ -488,7 +487,7 @@ def admin_onboarding_save():
     now = datetime.now().isoformat()
 
     if step == '1':
-        # Profile step
+        # Profile step: name, phone, business_type
         name = request.form.get('name', '').strip()
         phone = request.form.get('phone', '').strip()
         business_type = request.form.get('business_type', 'individual')
@@ -499,37 +498,63 @@ def admin_onboarding_save():
         ''', (name, phone, business_type, now, host_id))
 
     elif step == '2':
-        # Business details step
-        company_name = request.form.get('company_name', '').strip()
-        tax_id = request.form.get('tax_id', '').strip()
-        vat_eu = request.form.get('vat_eu', '').strip()
+        # Details step - different fields for individual vs company
+        account_type = request.form.get('account_type', 'individual')
         address_street = request.form.get('address_street', '').strip()
         address_city = request.form.get('address_city', '').strip()
         address_postal = request.form.get('address_postal', '').strip()
         address_country = request.form.get('address_country', 'PL').strip()
 
-        execute_query(cursor, '''
-            UPDATE hosts SET company_name = ?, tax_id = ?, vat_eu = ?,
-                            address_street = ?, address_city = ?, address_postal = ?,
-                            address_country = ?, updated_at = ?
-            WHERE id = ?
-        ''', (company_name, tax_id, vat_eu, address_street, address_city,
-              address_postal, address_country, now, host_id))
+        if account_type == 'individual':
+            # Individual: surname + address
+            surname = request.form.get('surname', '').strip()
+            execute_query(cursor, '''
+                UPDATE hosts SET surname = ?, address_street = ?, address_city = ?,
+                                address_postal = ?, address_country = ?, updated_at = ?
+                WHERE id = ?
+            ''', (surname, address_street, address_city, address_postal, address_country, now, host_id))
+        else:
+            # Company: company_name + address + tax_id + vat_eu
+            company_name = request.form.get('company_name', '').strip()
+            tax_id = request.form.get('tax_id', '').strip()
+            vat_eu = request.form.get('vat_eu', '').strip() or None
+
+            execute_query(cursor, '''
+                UPDATE hosts SET company_name = ?, tax_id = ?, vat_eu = ?,
+                                address_street = ?, address_city = ?, address_postal = ?,
+                                address_country = ?, updated_at = ?
+                WHERE id = ?
+            ''', (company_name, tax_id, vat_eu, address_street, address_city,
+                  address_postal, address_country, now, host_id))
 
     elif step == '3':
-        # Invoice settings step
-        bank_name = request.form.get('bank_name', '').strip()
-        bank_account = request.form.get('bank_account', '').strip()
-        payment_days_due = request.form.get('payment_days_due', '0')
+        # Invoice settings step: numbering_pattern + payment_instructions
+        numbering_pattern = request.form.get('numbering_pattern', 'simple')
         payment_instructions = request.form.get('payment_instructions', '').strip()
 
+        # Convert pattern choice to JSON format
+        pattern_map = {
+            'simple': '[{"type":"fixed","value":"INV"},{"type":"delimiter","value":"/"},{"type":"year"},{"type":"delimiter","value":"/"},{"type":"rolling","format":"000"}]',
+            'monthly': '[{"type":"fixed","value":"INV"},{"type":"delimiter","value":"/"},{"type":"year"},{"type":"delimiter","value":"/"},{"type":"month"},{"type":"delimiter","value":"/"},{"type":"rolling","format":"000"}]',
+            'custom_prefix': '[{"type":"fixed","value":"FV"},{"type":"delimiter","value":"/"},{"type":"year"},{"type":"delimiter","value":"/"},{"type":"rolling","format":"000"}]'
+        }
+        invoice_pattern = pattern_map.get(numbering_pattern, pattern_map['simple'])
+
         execute_query(cursor, '''
-            UPDATE hosts SET bank_name = ?, bank_account = ?,
-                            payment_days_due = ?, payment_instructions = ?, updated_at = ?
+            UPDATE hosts SET invoice_pattern = ?, payment_instructions = ?, updated_at = ?
             WHERE id = ?
-        ''', (bank_name, bank_account, int(payment_days_due), payment_instructions, now, host_id))
+        ''', (invoice_pattern, payment_instructions, now, host_id))
 
     elif step == '4':
+        # Plan selection step
+        plan = request.form.get('plan', 'free_trial')
+
+        execute_query(cursor, '''
+            UPDATE hosts SET plan = ?, plan_started_at = ?, updated_at = ?
+            WHERE id = ?
+        ''', (plan, now, now, host_id))
+
+    elif step == '5':
         # Complete onboarding
         execute_query(cursor, '''
             UPDATE hosts SET onboarding_completed = ?, updated_at = ?

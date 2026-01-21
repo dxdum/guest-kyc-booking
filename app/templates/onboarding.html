@@ -19,7 +19,7 @@
                     <div class="step-line"></div>
                     <div class="step" data-step="2">
                         <div class="step-number">2</div>
-                        <div class="step-label">Business</div>
+                        <div class="step-label" id="step2-label">Details</div>
                     </div>
                     <div class="step-line"></div>
                     <div class="step" data-step="3">
@@ -29,43 +29,67 @@
                     <div class="step-line"></div>
                     <div class="step" data-step="4">
                         <div class="step-number">4</div>
+                        <div class="step-label">Plan</div>
+                    </div>
+                    <div class="step-line"></div>
+                    <div class="step" data-step="5">
+                        <div class="step-number">5</div>
                         <div class="step-label">Complete</div>
                     </div>
                 </div>
             </div>
 
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ category }}">{{ message }}</div>
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
-
             <!-- Step 1: Profile -->
             <div class="wizard-step" id="step-1">
                 <div class="step-header">
                     <h2>Your Profile</h2>
-                    <p>Tell us a bit about yourself</p>
+                    <p>Tell us about yourself</p>
                 </div>
-                <form id="form-step-1">
+                <form id="form-step-1" novalidate>
                     <input type="hidden" name="step" value="1">
                     <div class="form-group">
-                        <label for="name">Your Name</label>
+                        <label for="name">Your Name <span class="required">*</span></label>
                         <input type="text" id="name" name="name" placeholder="Enter your full name"
                                value="{{ host.name or '' }}" required>
+                        <div class="error-message" id="name-error"></div>
                     </div>
                     <div class="form-group">
-                        <label for="phone">Phone Number</label>
-                        <input type="tel" id="phone" name="phone" placeholder="+48 123 456 789"
-                               value="{{ host.phone or '' }}">
+                        <label for="phone">Phone Number <span class="required">*</span></label>
+                        <div class="phone-input">
+                            <select id="phone_prefix" name="phone_prefix" class="phone-prefix">
+                                <option value="+48" {{ 'selected' if not host.phone or host.phone.startswith('+48') }}>+48 PL</option>
+                                <option value="+49" {{ 'selected' if host.phone and host.phone.startswith('+49') }}>+49 DE</option>
+                                <option value="+43" {{ 'selected' if host.phone and host.phone.startswith('+43') }}>+43 AT</option>
+                                <option value="+41" {{ 'selected' if host.phone and host.phone.startswith('+41') }}>+41 CH</option>
+                                <option value="+44" {{ 'selected' if host.phone and host.phone.startswith('+44') }}>+44 UK</option>
+                                <option value="+33" {{ 'selected' if host.phone and host.phone.startswith('+33') }}>+33 FR</option>
+                                <option value="+34" {{ 'selected' if host.phone and host.phone.startswith('+34') }}>+34 ES</option>
+                                <option value="+39" {{ 'selected' if host.phone and host.phone.startswith('+39') }}>+39 IT</option>
+                                <option value="+31" {{ 'selected' if host.phone and host.phone.startswith('+31') }}>+31 NL</option>
+                                <option value="+32" {{ 'selected' if host.phone and host.phone.startswith('+32') }}>+32 BE</option>
+                                <option value="+420" {{ 'selected' if host.phone and host.phone.startswith('+420') }}>+420 CZ</option>
+                                <option value="+421" {{ 'selected' if host.phone and host.phone.startswith('+421') }}>+421 SK</option>
+                                <option value="+36" {{ 'selected' if host.phone and host.phone.startswith('+36') }}>+36 HU</option>
+                                <option value="+45" {{ 'selected' if host.phone and host.phone.startswith('+45') }}>+45 DK</option>
+                                <option value="+46" {{ 'selected' if host.phone and host.phone.startswith('+46') }}>+46 SE</option>
+                                <option value="+47" {{ 'selected' if host.phone and host.phone.startswith('+47') }}>+47 NO</option>
+                                <option value="+358" {{ 'selected' if host.phone and host.phone.startswith('+358') }}>+358 FI</option>
+                                <option value="+351" {{ 'selected' if host.phone and host.phone.startswith('+351') }}>+351 PT</option>
+                                <option value="+30" {{ 'selected' if host.phone and host.phone.startswith('+30') }}>+30 GR</option>
+                                <option value="+353" {{ 'selected' if host.phone and host.phone.startswith('+353') }}>+353 IE</option>
+                                <option value="+1" {{ 'selected' if host.phone and host.phone.startswith('+1') }}>+1 US/CA</option>
+                            </select>
+                            <input type="tel" id="phone" name="phone" placeholder="123 456 789"
+                                   value="{{ host.phone[3:] if host.phone and host.phone.startswith('+') else host.phone or '' }}" required>
+                        </div>
+                        <div class="error-message" id="phone-error"></div>
                     </div>
                     <div class="form-group">
-                        <label>Account Type</label>
+                        <label>Account Type <span class="required">*</span></label>
                         <div class="radio-group">
                             <label class="radio-option">
                                 <input type="radio" name="business_type" value="individual"
-                                       {{ 'checked' if not host.business_type or host.business_type == 'individual' }}>
+                                       {{ 'checked' if not host.business_type or host.business_type == 'individual' }} required>
                                 <span class="radio-label">
                                     <strong>Individual</strong>
                                     <small>Personal rental income</small>
@@ -87,48 +111,120 @@
                 </form>
             </div>
 
-            <!-- Step 2: Business Details -->
-            <div class="wizard-step hidden" id="step-2">
+            <!-- Step 2a: Individual Details -->
+            <div class="wizard-step hidden" id="step-2-individual">
                 <div class="step-header">
-                    <h2>Business Details</h2>
+                    <h2>Personal Details</h2>
                     <p>Information for your invoices</p>
                 </div>
-                <form id="form-step-2">
+                <form id="form-step-2-individual" novalidate>
                     <input type="hidden" name="step" value="2">
+                    <input type="hidden" name="account_type" value="individual">
                     <div class="form-group">
-                        <label for="company_name">Company / Business Name</label>
-                        <input type="text" id="company_name" name="company_name"
-                               placeholder="Your company or full name for invoices"
-                               value="{{ host.company_name or '' }}">
+                        <label for="surname">Surname <span class="required">*</span></label>
+                        <input type="text" id="surname" name="surname" placeholder="Your surname"
+                               value="{{ host.surname or '' }}" required>
+                        <div class="error-message" id="surname-error"></div>
+                    </div>
+                    <div class="form-group">
+                        <label for="ind_address_street">Street Address <span class="required">*</span></label>
+                        <input type="text" id="ind_address_street" name="address_street"
+                               placeholder="ul. Example 123/45"
+                               value="{{ host.address_street or '' }}" required>
+                        <div class="error-message" id="ind_address_street-error"></div>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="tax_id">Tax ID (NIP)</label>
+                            <label for="ind_address_city">City <span class="required">*</span></label>
+                            <input type="text" id="ind_address_city" name="address_city" placeholder="Warsaw"
+                                   value="{{ host.address_city or '' }}" required>
+                            <div class="error-message" id="ind_address_city-error"></div>
+                        </div>
+                        <div class="form-group">
+                            <label for="ind_address_postal">Postal Code <span class="required">*</span></label>
+                            <input type="text" id="ind_address_postal" name="address_postal" placeholder="00-001"
+                                   value="{{ host.address_postal or '' }}" required pattern="[0-9]{2}-[0-9]{3}">
+                            <div class="error-message" id="ind_address_postal-error"></div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="ind_address_country">Country <span class="required">*</span></label>
+                        <select id="ind_address_country" name="address_country" required>
+                            <option value="PL" {{ 'selected' if not host.address_country or host.address_country == 'PL' }}>Poland</option>
+                            <option value="DE" {{ 'selected' if host.address_country == 'DE' }}>Germany</option>
+                            <option value="AT" {{ 'selected' if host.address_country == 'AT' }}>Austria</option>
+                            <option value="CZ" {{ 'selected' if host.address_country == 'CZ' }}>Czech Republic</option>
+                            <option value="SK" {{ 'selected' if host.address_country == 'SK' }}>Slovakia</option>
+                            <option value="other">Other EU Country</option>
+                        </select>
+                    </div>
+                    <div class="step-actions">
+                        <button type="button" class="btn btn-secondary" onclick="goToStep(1)">Back</button>
+                        <button type="submit" class="btn btn-primary">Continue</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Step 2b: Company Details -->
+            <div class="wizard-step hidden" id="step-2-company">
+                <div class="step-header">
+                    <h2>Company Details</h2>
+                    <p>Information for your invoices</p>
+                </div>
+                <form id="form-step-2-company" novalidate>
+                    <input type="hidden" name="step" value="2">
+                    <input type="hidden" name="account_type" value="company">
+                    <div class="form-group">
+                        <label for="company_name">Company Name <span class="required">*</span></label>
+                        <input type="text" id="company_name" name="company_name"
+                               placeholder="Your company name"
+                               value="{{ host.company_name or '' }}" required>
+                        <div class="error-message" id="company_name-error"></div>
+                    </div>
+                    <div class="form-group">
+                        <label for="comp_address_street">Street Address <span class="required">*</span></label>
+                        <input type="text" id="comp_address_street" name="address_street"
+                               placeholder="ul. Example 123/45"
+                               value="{{ host.address_street or '' }}" required>
+                        <div class="error-message" id="comp_address_street-error"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="comp_address_city">City <span class="required">*</span></label>
+                            <input type="text" id="comp_address_city" name="address_city" placeholder="Warsaw"
+                                   value="{{ host.address_city or '' }}" required>
+                            <div class="error-message" id="comp_address_city-error"></div>
+                        </div>
+                        <div class="form-group">
+                            <label for="comp_address_postal">Postal Code <span class="required">*</span></label>
+                            <input type="text" id="comp_address_postal" name="address_postal" placeholder="00-001"
+                                   value="{{ host.address_postal or '' }}" required>
+                            <div class="error-message" id="comp_address_postal-error"></div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="comp_address_country">Country <span class="required">*</span></label>
+                        <select id="comp_address_country" name="address_country" required>
+                            <option value="PL" {{ 'selected' if not host.address_country or host.address_country == 'PL' }}>Poland</option>
+                            <option value="DE" {{ 'selected' if host.address_country == 'DE' }}>Germany</option>
+                            <option value="AT" {{ 'selected' if host.address_country == 'AT' }}>Austria</option>
+                            <option value="CZ" {{ 'selected' if host.address_country == 'CZ' }}>Czech Republic</option>
+                            <option value="SK" {{ 'selected' if host.address_country == 'SK' }}>Slovakia</option>
+                            <option value="other">Other EU Country</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="tax_id">Tax ID (NIP) <span class="required">*</span></label>
                             <input type="text" id="tax_id" name="tax_id" placeholder="1234567890"
-                                   value="{{ host.tax_id or '' }}">
+                                   value="{{ host.tax_id or '' }}" required pattern="[0-9]{10}">
+                            <div class="error-message" id="tax_id-error"></div>
                         </div>
                         <div class="form-group">
                             <label for="vat_eu">VAT EU <span class="opt">(optional)</span></label>
                             <input type="text" id="vat_eu" name="vat_eu" placeholder="PL1234567890"
-                                   value="{{ host.vat_eu or '' }}">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="address_street">Street Address</label>
-                        <input type="text" id="address_street" name="address_street"
-                               placeholder="ul. Example 123/45"
-                               value="{{ host.address_street or '' }}">
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="address_city">City</label>
-                            <input type="text" id="address_city" name="address_city" placeholder="Warsaw"
-                                   value="{{ host.address_city or '' }}">
-                        </div>
-                        <div class="form-group">
-                            <label for="address_postal">Postal Code</label>
-                            <input type="text" id="address_postal" name="address_postal" placeholder="00-001"
-                                   value="{{ host.address_postal or '' }}">
+                                   value="{{ host.vat_eu or '' }}" pattern="[A-Z]{2}[0-9]{8,12}">
+                            <div class="error-message" id="vat_eu-error"></div>
                         </div>
                     </div>
                     <div class="step-actions">
@@ -144,43 +240,118 @@
                     <h2>Invoice Settings</h2>
                     <p>Configure how invoices are generated</p>
                 </div>
-                <form id="form-step-3">
+                <form id="form-step-3" novalidate>
                     <input type="hidden" name="step" value="3">
+
                     <div class="form-group">
-                        <label for="bank_name">Bank Name</label>
-                        <input type="text" id="bank_name" name="bank_name"
-                               placeholder="e.g., mBank, PKO BP"
-                               value="{{ host.bank_name or '' }}">
+                        <label>Invoice Numbering Pattern</label>
+                        <div class="numbering-preview">
+                            <span class="preview-label">Preview:</span>
+                            <span class="preview-number" id="invoice-preview">INV/2026/001</span>
+                        </div>
+                        <div class="numbering-builder">
+                            <div class="pattern-options">
+                                <label class="pattern-option">
+                                    <input type="radio" name="numbering_pattern" value="simple" checked>
+                                    <span>INV/2026/001</span>
+                                </label>
+                                <label class="pattern-option">
+                                    <input type="radio" name="numbering_pattern" value="monthly">
+                                    <span>INV/2026/01/001</span>
+                                </label>
+                                <label class="pattern-option">
+                                    <input type="radio" name="numbering_pattern" value="custom_prefix">
+                                    <span>FV/2026/001</span>
+                                </label>
+                            </div>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="bank_account">Bank Account (IBAN)</label>
-                        <input type="text" id="bank_account" name="bank_account"
-                               placeholder="PL 00 0000 0000 0000 0000 0000 0000"
-                               value="{{ host.bank_account or '' }}">
-                    </div>
-                    <div class="form-group">
-                        <label for="payment_days_due">Payment Due (days)</label>
-                        <select id="payment_days_due" name="payment_days_due">
-                            <option value="0" {{ 'selected' if host.payment_days_due == 0 }}>Payment already received</option>
-                            <option value="7" {{ 'selected' if host.payment_days_due == 7 }}>7 days</option>
-                            <option value="14" {{ 'selected' if host.payment_days_due == 14 }}>14 days</option>
-                            <option value="30" {{ 'selected' if host.payment_days_due == 30 }}>30 days</option>
-                        </select>
-                    </div>
+
                     <div class="form-group">
                         <label for="payment_instructions">Payment Instructions</label>
                         <textarea id="payment_instructions" name="payment_instructions" rows="3"
                                   placeholder="e.g., Payment already settled via Booking.com">{{ host.payment_instructions or 'Payment already settled via Booking.com' }}</textarea>
+                        <small class="form-hint">This text appears on every invoice you generate</small>
                     </div>
+
                     <div class="step-actions">
-                        <button type="button" class="btn btn-secondary" onclick="goToStep(2)">Back</button>
+                        <button type="button" class="btn btn-secondary" onclick="goBack()">Back</button>
+                        <button type="button" class="btn btn-outline" onclick="skipStep()">Skip</button>
                         <button type="submit" class="btn btn-primary">Continue</button>
                     </div>
                 </form>
             </div>
 
-            <!-- Step 4: Complete -->
+            <!-- Step 4: Plan Selection -->
             <div class="wizard-step hidden" id="step-4">
+                <div class="step-header">
+                    <h2>Choose Your Plan</h2>
+                    <p>Start with a free trial, upgrade anytime</p>
+                </div>
+                <form id="form-step-4" novalidate>
+                    <input type="hidden" name="step" value="4">
+
+                    <div class="pricing-cards">
+                        <label class="pricing-card selected">
+                            <input type="radio" name="plan" value="free_trial" checked>
+                            <div class="card-badge">14 Days Free</div>
+                            <div class="card-name">Free Trial</div>
+                            <div class="card-price">
+                                <span class="price">$0</span>
+                            </div>
+                            <ul class="card-features">
+                                <li>Up to 3 properties</li>
+                                <li>30 invoices/month</li>
+                                <li>Email support</li>
+                            </ul>
+                        </label>
+
+                        <label class="pricing-card">
+                            <input type="radio" name="plan" value="standard">
+                            <div class="card-name">Standard</div>
+                            <div class="card-price">
+                                <span class="price">$19</span>
+                                <span class="period">/month</span>
+                            </div>
+                            <ul class="card-features">
+                                <li>Up to 5 properties</li>
+                                <li>100 invoices/month</li>
+                                <li>Custom templates</li>
+                                <li>Priority support</li>
+                            </ul>
+                        </label>
+
+                        <label class="pricing-card">
+                            <input type="radio" name="plan" value="pro">
+                            <div class="card-badge popular">Most Popular</div>
+                            <div class="card-name">Pro</div>
+                            <div class="card-price">
+                                <span class="price">$49</span>
+                                <span class="period">/month</span>
+                            </div>
+                            <ul class="card-features">
+                                <li>Up to 15 properties</li>
+                                <li>Unlimited invoices</li>
+                                <li>API access</li>
+                                <li>Multi-user access</li>
+                                <li>Advanced analytics</li>
+                            </ul>
+                        </label>
+                    </div>
+
+                    <p class="enterprise-note">
+                        Need more? <a href="mailto:contact@uniko.ai">Contact us</a> for Enterprise pricing.
+                    </p>
+
+                    <div class="step-actions">
+                        <button type="button" class="btn btn-secondary" onclick="goToStep(3)">Back</button>
+                        <button type="submit" class="btn btn-primary">Continue</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Step 5: Complete -->
+            <div class="wizard-step hidden" id="step-5">
                 <div class="step-header complete">
                     <div class="success-icon">
                         <svg viewBox="0 0 24 24" width="64" height="64">
@@ -191,8 +362,8 @@
                     <h2>You're All Set!</h2>
                     <p>Your account is ready. Start by adding your first reservation.</p>
                 </div>
-                <form id="form-step-4" action="{{ url_for('admin_onboarding_save') }}" method="POST">
-                    <input type="hidden" name="step" value="4">
+                <form id="form-step-5" action="{{ url_for('admin_onboarding_save') }}" method="POST">
+                    <input type="hidden" name="step" value="5">
                     <div class="step-actions center">
                         <button type="submit" class="btn btn-primary btn-lg">Go to Dashboard</button>
                     </div>
@@ -210,345 +381,283 @@
             background: linear-gradient(135deg, #3B82F6 0%, #1E40AF 50%, #1E3A8A 100%);
             padding: 20px;
         }
-
-        .onboarding-container {
-            width: 100%;
-            max-width: 540px;
-        }
-
+        .onboarding-container { width: 100%; max-width: 600px; }
         .onboarding-card {
             background: white;
             border-radius: 16px;
             box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15);
             padding: 2rem;
-            animation: cardFadeIn 0.5s ease-out;
         }
-
-        /* Progress bar */
-        .progress-bar {
-            margin-bottom: 2rem;
-        }
-
-        .progress-steps {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .step {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            position: relative;
-            z-index: 1;
-        }
-
+        .progress-bar { margin-bottom: 2rem; }
+        .progress-steps { display: flex; align-items: center; justify-content: space-between; }
+        .step { display: flex; flex-direction: column; align-items: center; position: relative; z-index: 1; }
         .step-number {
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            background: #E5E7EB;
-            color: #9CA3AF;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 600;
-            font-size: 0.9rem;
-            transition: all 0.3s ease;
+            width: 32px; height: 32px; border-radius: 50%; background: #E5E7EB; color: #9CA3AF;
+            display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 0.85rem;
         }
+        .step.active .step-number, .step.completed .step-number { background: #3B82F6; color: white; }
+        .step.completed .step-number { background: #10B981; }
+        .step-label { font-size: 0.7rem; color: #9CA3AF; margin-top: 0.4rem; font-weight: 500; }
+        .step.active .step-label { color: #3B82F6; }
+        .step.completed .step-label { color: #10B981; }
+        .step-line { flex: 1; height: 2px; background: #E5E7EB; margin: 0 0.3rem; margin-bottom: 1.2rem; }
+        .step-line.completed { background: #10B981; }
 
-        .step.active .step-number,
-        .step.completed .step-number {
-            background: #3B82F6;
-            color: white;
+        .wizard-step { animation: fadeIn 0.3s ease; }
+        .wizard-step.hidden { display: none; }
+        .step-header { text-align: center; margin-bottom: 1.5rem; }
+        .step-header h2 { font-size: 1.4rem; color: #1F2937; margin-bottom: 0.5rem; }
+        .step-header p { color: #6B7280; font-size: 0.95rem; }
+        .step-header.complete { padding: 1rem 0; }
+        .success-icon { margin-bottom: 1rem; }
+
+        .form-group { margin-bottom: 1.25rem; }
+        .form-group label { display: block; font-weight: 600; font-size: 0.9rem; color: #374151; margin-bottom: 0.5rem; }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%; padding: 0.75rem 1rem; font-size: 0.95rem;
+            border: 2px solid #E5E7EB; border-radius: 10px; font-family: inherit;
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
-
-        .step.completed .step-number {
-            background: #10B981;
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            border-color: #3B82F6; box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15); outline: none;
         }
+        .form-group input.error, .form-group select.error { border-color: #EF4444; }
+        .error-message { color: #EF4444; font-size: 0.8rem; margin-top: 0.3rem; display: none; }
+        .error-message.visible { display: block; }
+        .form-hint { color: #6B7280; font-size: 0.8rem; margin-top: 0.3rem; }
+        .required { color: #EF4444; }
+        .opt { color: #9CA3AF; font-weight: 400; font-size: 0.8rem; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 
-        .step-label {
-            font-size: 0.75rem;
-            color: #9CA3AF;
-            margin-top: 0.5rem;
-            font-weight: 500;
-        }
+        .phone-input { display: flex; gap: 0.5rem; }
+        .phone-prefix { width: 100px; flex-shrink: 0; }
+        .phone-input input { flex: 1; }
 
-        .step.active .step-label {
-            color: #3B82F6;
-        }
-
-        .step.completed .step-label {
-            color: #10B981;
-        }
-
-        .step-line {
-            flex: 1;
-            height: 2px;
-            background: #E5E7EB;
-            margin: 0 0.5rem;
-            margin-bottom: 1.5rem;
-            transition: background 0.3s ease;
-        }
-
-        .step-line.completed {
-            background: #10B981;
-        }
-
-        /* Wizard steps */
-        .wizard-step {
-            animation: fadeIn 0.3s ease;
-        }
-
-        .wizard-step.hidden {
-            display: none;
-        }
-
-        .step-header {
-            text-align: center;
-            margin-bottom: 1.5rem;
-        }
-
-        .step-header h2 {
-            font-family: 'Poppins', sans-serif;
-            font-size: 1.5rem;
-            color: #1F2937;
-            margin-bottom: 0.5rem;
-        }
-
-        .step-header p {
-            color: #6B7280;
-            font-size: 0.95rem;
-        }
-
-        .step-header.complete {
-            padding: 1rem 0;
-        }
-
-        .success-icon {
-            margin-bottom: 1rem;
-        }
-
-        /* Form elements */
-        .form-group {
-            margin-bottom: 1.25rem;
-        }
-
-        .form-group label {
-            display: block;
-            font-weight: 600;
-            font-size: 0.9rem;
-            color: #374151;
-            margin-bottom: 0.5rem;
-        }
-
-        .form-group input,
-        .form-group select,
-        .form-group textarea {
-            width: 100%;
-            padding: 0.75rem 1rem;
-            font-size: 0.95rem;
-            border: 2px solid #E5E7EB;
-            border-radius: 10px;
-            transition: border-color 0.2s ease, box-shadow 0.2s ease;
-            font-family: inherit;
-        }
-
-        .form-group input:focus,
-        .form-group select:focus,
-        .form-group textarea:focus {
-            border-color: #3B82F6;
-            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
-            outline: none;
-        }
-
-        .form-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1rem;
-        }
-
-        /* Radio group */
-        .radio-group {
-            display: flex;
-            gap: 1rem;
-        }
-
-        .radio-option {
-            flex: 1;
-            cursor: pointer;
-        }
-
-        .radio-option input {
-            display: none;
-        }
-
+        .radio-group { display: flex; gap: 1rem; }
+        .radio-option { flex: 1; cursor: pointer; }
+        .radio-option input { display: none; }
         .radio-label {
-            display: block;
-            padding: 1rem;
-            border: 2px solid #E5E7EB;
-            border-radius: 10px;
-            text-align: center;
-            transition: all 0.2s ease;
+            display: block; padding: 1rem; border: 2px solid #E5E7EB;
+            border-radius: 10px; text-align: center; transition: all 0.2s;
         }
+        .radio-option input:checked + .radio-label { border-color: #3B82F6; background: #EFF6FF; }
+        .radio-label strong { display: block; color: #1F2937; }
+        .radio-label small { color: #6B7280; font-size: 0.8rem; }
 
-        .radio-option input:checked + .radio-label {
-            border-color: #3B82F6;
-            background: #EFF6FF;
+        .numbering-preview {
+            background: #F3F4F6; padding: 1rem; border-radius: 8px;
+            margin-bottom: 1rem; text-align: center;
         }
-
-        .radio-label strong {
-            display: block;
-            color: #1F2937;
+        .preview-label { color: #6B7280; font-size: 0.85rem; }
+        .preview-number { font-size: 1.2rem; font-weight: 600; color: #1F2937; margin-left: 0.5rem; font-family: monospace; }
+        .pattern-options { display: flex; flex-direction: column; gap: 0.5rem; }
+        .pattern-option {
+            display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem;
+            border: 2px solid #E5E7EB; border-radius: 8px; cursor: pointer;
         }
+        .pattern-option:has(input:checked) { border-color: #3B82F6; background: #EFF6FF; }
+        .pattern-option span { font-family: monospace; }
 
-        .radio-label small {
-            color: #6B7280;
-            font-size: 0.8rem;
+        .pricing-cards { display: flex; gap: 1rem; margin-bottom: 1rem; }
+        .pricing-card {
+            flex: 1; border: 2px solid #E5E7EB; border-radius: 12px; padding: 1.25rem;
+            cursor: pointer; position: relative; transition: all 0.2s;
         }
-
-        /* Step actions */
-        .step-actions {
-            display: flex;
-            gap: 1rem;
-            margin-top: 2rem;
+        .pricing-card:has(input:checked) { border-color: #3B82F6; background: #EFF6FF; }
+        .pricing-card input { display: none; }
+        .card-badge {
+            position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+            background: #3B82F6; color: white; font-size: 0.7rem; font-weight: 600;
+            padding: 0.25rem 0.75rem; border-radius: 20px;
         }
+        .card-badge.popular { background: #10B981; }
+        .card-name { font-weight: 600; font-size: 1rem; color: #1F2937; margin-bottom: 0.5rem; margin-top: 0.5rem; }
+        .card-price { margin-bottom: 0.75rem; }
+        .card-price .price { font-size: 1.5rem; font-weight: 700; color: #1F2937; }
+        .card-price .period { font-size: 0.85rem; color: #6B7280; }
+        .card-features { list-style: none; padding: 0; margin: 0; font-size: 0.8rem; color: #4B5563; }
+        .card-features li { padding: 0.25rem 0; }
+        .card-features li::before { content: "✓ "; color: #10B981; }
+        .enterprise-note { text-align: center; font-size: 0.85rem; color: #6B7280; margin-top: 1rem; }
+        .enterprise-note a { color: #3B82F6; }
 
-        .step-actions.center {
-            justify-content: center;
-        }
-
+        .step-actions { display: flex; gap: 1rem; margin-top: 2rem; }
+        .step-actions.center { justify-content: center; }
         .step-actions .btn {
-            flex: 1;
-            padding: 0.85rem 1.5rem;
-            font-size: 1rem;
-            font-weight: 600;
-            border-radius: 10px;
-            cursor: pointer;
-            transition: all 0.2s ease;
+            flex: 1; padding: 0.85rem 1.5rem; font-size: 1rem; font-weight: 600;
+            border-radius: 10px; cursor: pointer; transition: all 0.2s;
         }
-
         .btn-primary {
             background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
-            color: white;
-            border: none;
-            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+            color: white; border: none; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
         }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4); }
+        .btn-secondary { background: white; color: #6B7280; border: 2px solid #E5E7EB; }
+        .btn-secondary:hover { border-color: #D1D5DB; background: #F9FAFB; }
+        .btn-outline { background: transparent; color: #6B7280; border: 2px solid #E5E7EB; }
+        .btn-outline:hover { border-color: #D1D5DB; }
+        .btn-lg { padding: 1rem 2rem; font-size: 1.1rem; }
 
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
-        }
-
-        .btn-secondary {
-            background: white;
-            color: #6B7280;
-            border: 2px solid #E5E7EB;
-        }
-
-        .btn-secondary:hover {
-            border-color: #D1D5DB;
-            background: #F9FAFB;
-        }
-
-        .btn-lg {
-            padding: 1rem 2rem;
-            font-size: 1.1rem;
-        }
-
-        .opt {
-            color: #9CA3AF;
-            font-weight: 400;
-            font-size: 0.8rem;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         @media (max-width: 640px) {
-            .form-row {
-                grid-template-columns: 1fr;
-            }
-            .radio-group {
-                flex-direction: column;
-            }
-            .step-label {
-                display: none;
-            }
+            .form-row { grid-template-columns: 1fr; }
+            .radio-group { flex-direction: column; }
+            .pricing-cards { flex-direction: column; }
+            .step-label { display: none; }
         }
     </style>
 
     <script>
         let currentStep = 1;
+        let accountType = 'individual';
 
         function goToStep(step) {
-            // Hide current step
-            document.getElementById(`step-${currentStep}`).classList.add('hidden');
+            // Hide all steps
+            document.querySelectorAll('.wizard-step').forEach(el => el.classList.add('hidden'));
 
-            // Show new step
-            document.getElementById(`step-${step}`).classList.remove('hidden');
+            // Determine which step to show
+            let stepId = `step-${step}`;
+            if (step === 2) {
+                stepId = accountType === 'company' ? 'step-2-company' : 'step-2-individual';
+            }
 
-            // Update progress
+            document.getElementById(stepId).classList.remove('hidden');
             updateProgress(step);
-
             currentStep = step;
+        }
+
+        function goBack() {
+            goToStep(currentStep - 1 === 2 ? 2 : currentStep - 1);
+        }
+
+        function skipStep() {
+            // Skip to next step without saving
+            goToStep(currentStep + 1);
         }
 
         function updateProgress(step) {
             document.querySelectorAll('.progress-steps .step').forEach((el, i) => {
                 const stepNum = i + 1;
                 el.classList.remove('active', 'completed');
-
-                if (stepNum < step) {
-                    el.classList.add('completed');
-                } else if (stepNum === step) {
-                    el.classList.add('active');
-                }
+                if (stepNum < step) el.classList.add('completed');
+                else if (stepNum === step) el.classList.add('active');
             });
-
-            // Update lines
             document.querySelectorAll('.step-line').forEach((el, i) => {
-                if (i < step - 1) {
-                    el.classList.add('completed');
-                } else {
-                    el.classList.remove('completed');
-                }
+                el.classList.toggle('completed', i < step - 1);
             });
         }
 
-        // Handle form submissions
-        document.querySelectorAll('form[id^="form-step-"]').forEach(form => {
-            if (form.id !== 'form-step-4') {
-                form.addEventListener('submit', async (e) => {
-                    e.preventDefault();
-
-                    const formData = new FormData(form);
-                    const btn = form.querySelector('button[type="submit"]');
-                    btn.disabled = true;
-                    btn.textContent = 'Saving...';
-
-                    try {
-                        const response = await fetch('{{ url_for("admin_onboarding_save") }}', {
-                            method: 'POST',
-                            body: formData
-                        });
-
-                        const data = await response.json();
-
-                        if (data.success) {
-                            goToStep(data.next_step);
-                        }
-                    } catch (error) {
-                        console.error('Error:', error);
-                        alert('Something went wrong. Please try again.');
+        function validateForm(form) {
+            let valid = true;
+            form.querySelectorAll('[required]').forEach(input => {
+                const errorEl = document.getElementById(`${input.id}-error`);
+                if (!input.value.trim()) {
+                    input.classList.add('error');
+                    if (errorEl) {
+                        errorEl.textContent = 'This field is required';
+                        errorEl.classList.add('visible');
                     }
+                    valid = false;
+                } else if (input.pattern && !new RegExp(`^${input.pattern}$`).test(input.value)) {
+                    input.classList.add('error');
+                    if (errorEl) {
+                        errorEl.textContent = 'Invalid format';
+                        errorEl.classList.add('visible');
+                    }
+                    valid = false;
+                } else {
+                    input.classList.remove('error');
+                    if (errorEl) errorEl.classList.remove('visible');
+                }
+            });
+            return valid;
+        }
 
-                    btn.disabled = false;
-                    btn.textContent = 'Continue';
-                });
+        // Step 1: Watch account type changes
+        document.querySelectorAll('input[name="business_type"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                accountType = e.target.value;
+                document.getElementById('step2-label').textContent =
+                    accountType === 'company' ? 'Company' : 'Personal';
+            });
+        });
+
+        // Invoice numbering preview
+        document.querySelectorAll('input[name="numbering_pattern"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                const previews = { simple: 'INV/2026/001', monthly: 'INV/2026/01/001', custom_prefix: 'FV/2026/001' };
+                document.getElementById('invoice-preview').textContent = previews[e.target.value];
+            });
+        });
+
+        // Form submissions
+        async function handleFormSubmit(form, nextStep) {
+            if (!validateForm(form)) return;
+
+            const formData = new FormData(form);
+
+            // Combine phone prefix and number for step 1
+            if (formData.get('phone_prefix')) {
+                const fullPhone = formData.get('phone_prefix') + ' ' + formData.get('phone');
+                formData.set('phone', fullPhone);
+                formData.delete('phone_prefix');
             }
+
+            const btn = form.querySelector('button[type="submit"]');
+            btn.disabled = true;
+            btn.textContent = 'Saving...';
+
+            try {
+                const response = await fetch('{{ url_for("admin_onboarding_save") }}', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (data.success) {
+                    goToStep(nextStep);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Something went wrong. Please try again.');
+            }
+
+            btn.disabled = false;
+            btn.textContent = 'Continue';
+        }
+
+        document.getElementById('form-step-1').addEventListener('submit', (e) => {
+            e.preventDefault();
+            accountType = document.querySelector('input[name="business_type"]:checked').value;
+            handleFormSubmit(e.target, 2);
+        });
+
+        document.getElementById('form-step-2-individual').addEventListener('submit', (e) => {
+            e.preventDefault();
+            handleFormSubmit(e.target, 3);
+        });
+
+        document.getElementById('form-step-2-company').addEventListener('submit', (e) => {
+            e.preventDefault();
+            handleFormSubmit(e.target, 3);
+        });
+
+        document.getElementById('form-step-3').addEventListener('submit', (e) => {
+            e.preventDefault();
+            handleFormSubmit(e.target, 4);
+        });
+
+        document.getElementById('form-step-4').addEventListener('submit', (e) => {
+            e.preventDefault();
+            handleFormSubmit(e.target, 5);
+        });
+
+        // Clear error on input
+        document.querySelectorAll('input, select, textarea').forEach(input => {
+            input.addEventListener('input', () => {
+                input.classList.remove('error');
+                const errorEl = document.getElementById(`${input.id}-error`);
+                if (errorEl) errorEl.classList.remove('visible');
+            });
         });
     </script>
 </body>
