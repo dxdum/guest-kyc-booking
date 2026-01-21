@@ -23,6 +23,9 @@ from email_service import send_verification_email
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'demo-secret-key-2025')
 
+# Initialize database tables on startup
+init_db()
+
 # For backwards compatibility - demo credentials fallback
 DEMO_EMAIL = os.environ.get('ADMIN_EMAIL', 'dar.duminski@gmail.com')
 DEMO_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'pass_2912')
