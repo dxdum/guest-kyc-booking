@@ -588,22 +588,28 @@ def admin_logout():
 @login_required
 def admin_profile():
     """User profile page."""
-    host_id = get_current_host_id()
+    try:
+        host_id = get_current_host_id()
 
-    conn = get_db()
-    if DB_TYPE == 'postgresql':
-        from psycopg2.extras import RealDictCursor
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        cursor.execute('SELECT * FROM hosts WHERE id = %s', (host_id,))
-    else:
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM hosts WHERE id = ?', (host_id,))
+        conn = get_db()
+        if DB_TYPE == 'postgresql':
+            from psycopg2.extras import RealDictCursor
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute('SELECT * FROM hosts WHERE id = %s', (host_id,))
+        else:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM hosts WHERE id = ?', (host_id,))
 
-    host = cursor.fetchone()
-    conn.close()
+        host = cursor.fetchone()
+        conn.close()
 
-    host_dict = dict(host) if host else {}
-    return render_template('profile.html', host=host_dict)
+        host_dict = dict(host) if host else {}
+        return render_template('profile.html', host=host_dict)
+    except Exception as e:
+        import traceback
+        error_msg = f"Profile error: {str(e)}\n{traceback.format_exc()}"
+        print(error_msg)
+        return f"<pre>Error loading profile:\n{error_msg}</pre>", 500
 
 
 @app.route('/admin/profile', methods=['POST'])
