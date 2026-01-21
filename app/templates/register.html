@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - Guest Check-in System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="login-page">
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-header">
+                <h1>Guest Check-in System</h1>
+                <p>Create Your Account</p>
+            </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <form method="POST" action="{{ url_for('register_post') }}" class="login-form">
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" required
+                           placeholder="Enter your email" autofocus>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <div class="password-wrapper">
+                        <input type="password" id="password" name="password" required
+                               placeholder="Create a password" minlength="6">
+                        <button type="button" class="password-toggle" onclick="togglePassword('password', this)">
+                            <svg class="eye-icon" viewBox="0 0 24 24" width="20" height="20">
+                                <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" fill="currentColor"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="password_confirm">Confirm Password</label>
+                    <div class="password-wrapper">
+                        <input type="password" id="password_confirm" name="password_confirm" required
+                               placeholder="Confirm your password" minlength="6">
+                        <button type="button" class="password-toggle" onclick="togglePassword('password_confirm', this)">
+                            <svg class="eye-icon" viewBox="0 0 24 24" width="20" height="20">
+                                <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" fill="currentColor"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-full">Create Account</button>
+            </form>
+
+            <script>
+                function togglePassword(inputId, btn) {
+                    const input = document.getElementById(inputId);
+                    if (input.type === 'password') {
+                        input.type = 'text';
+                        btn.classList.add('active');
+                    } else {
+                        input.type = 'password';
+                        btn.classList.remove('active');
+                    }
+                }
+            </script>
+
+            <style>
+                .password-wrapper {
+                    position: relative;
+                    display: flex;
+                    align-items: center;
+                }
+                .password-wrapper input {
+                    flex: 1;
+                    padding-right: 40px;
+                }
+                .password-toggle {
+                    position: absolute;
+                    right: 10px;
+                    background: none;
+                    border: none;
+                    cursor: pointer;
+                    padding: 5px;
+                    color: #666;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+                .password-toggle:hover {
+                    color: #333;
+                }
+                .password-toggle.active {
+                    color: #2C7BFF;
+                }
+            </style>
+
+            <div class="login-footer">
+                <p>Already have an account? <a href="{{ url_for('admin_login') }}">Login here</a></p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

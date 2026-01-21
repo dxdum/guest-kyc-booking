@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account Setup - Guest Check-in System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="onboarding-page">
+    <div class="onboarding-container">
+        <div class="onboarding-card">
+            <!-- Progress bar -->
+            <div class="progress-bar">
+                <div class="progress-steps">
+                    <div class="step active" data-step="1">
+                        <div class="step-number">1</div>
+                        <div class="step-label">Profile</div>
+                    </div>
+                    <div class="step-line"></div>
+                    <div class="step" data-step="2">
+                        <div class="step-number">2</div>
+                        <div class="step-label">Business</div>
+                    </div>
+                    <div class="step-line"></div>
+                    <div class="step" data-step="3">
+                        <div class="step-number">3</div>
+                        <div class="step-label">Invoicing</div>
+                    </div>
+                    <div class="step-line"></div>
+                    <div class="step" data-step="4">
+                        <div class="step-number">4</div>
+                        <div class="step-label">Complete</div>
+                    </div>
+                </div>
+            </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <!-- Step 1: Profile -->
+            <div class="wizard-step" id="step-1">
+                <div class="step-header">
+                    <h2>Your Profile</h2>
+                    <p>Tell us a bit about yourself</p>
+                </div>
+                <form id="form-step-1">
+                    <input type="hidden" name="step" value="1">
+                    <div class="form-group">
+                        <label for="name">Your Name</label>
+                        <input type="text" id="name" name="name" placeholder="Enter your full name"
+                               value="{{ host.name or '' }}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="phone">Phone Number</label>
+                        <input type="tel" id="phone" name="phone" placeholder="+48 123 456 789"
+                               value="{{ host.phone or '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Account Type</label>
+                        <div class="radio-group">
+                            <label class="radio-option">
+                                <input type="radio" name="business_type" value="individual"
+                                       {{ 'checked' if not host.business_type or host.business_type == 'individual' }}>
+                                <span class="radio-label">
+                                    <strong>Individual</strong>
+                                    <small>Personal rental income</small>
+                                </span>
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="business_type" value="company"
+                                       {{ 'checked' if host.business_type == 'company' }}>
+                                <span class="radio-label">
+                                    <strong>Company</strong>
+                                    <small>Registered business</small>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="step-actions">
+                        <button type="submit" class="btn btn-primary">Continue</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Step 2: Business Details -->
+            <div class="wizard-step hidden" id="step-2">
+                <div class="step-header">
+                    <h2>Business Details</h2>
+                    <p>Information for your invoices</p>
+                </div>
+                <form id="form-step-2">
+                    <input type="hidden" name="step" value="2">
+                    <div class="form-group">
+                        <label for="company_name">Company / Business Name</label>
+                        <input type="text" id="company_name" name="company_name"
+                               placeholder="Your company or full name for invoices"
+                               value="{{ host.company_name or '' }}">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="tax_id">Tax ID (NIP)</label>
+                            <input type="text" id="tax_id" name="tax_id" placeholder="1234567890"
+                                   value="{{ host.tax_id or '' }}">
+                        </div>
+                        <div class="form-group">
+                            <label for="vat_eu">VAT EU <span class="opt">(optional)</span></label>
+                            <input type="text" id="vat_eu" name="vat_eu" placeholder="PL1234567890"
+                                   value="{{ host.vat_eu or '' }}">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="address_street">Street Address</label>
+                        <input type="text" id="address_street" name="address_street"
+                               placeholder="ul. Example 123/45"
+                               value="{{ host.address_street or '' }}">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="address_city">City</label>
+                            <input type="text" id="address_city" name="address_city" placeholder="Warsaw"
+                                   value="{{ host.address_city or '' }}">
+                        </div>
+                        <div class="form-group">
+                            <label for="address_postal">Postal Code</label>
+                            <input type="text" id="address_postal" name="address_postal" placeholder="00-001"
+                                   value="{{ host.address_postal or '' }}">
+                        </div>
+                    </div>
+                    <div class="step-actions">
+                        <button type="button" class="btn btn-secondary" onclick="goToStep(1)">Back</button>
+                        <button type="submit" class="btn btn-primary">Continue</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Step 3: Invoice Settings -->
+            <div class="wizard-step hidden" id="step-3">
+                <div class="step-header">
+                    <h2>Invoice Settings</h2>
+                    <p>Configure how invoices are generated</p>
+                </div>
+                <form id="form-step-3">
+                    <input type="hidden" name="step" value="3">
+                    <div class="form-group">
+                        <label for="bank_name">Bank Name</label>
+                        <input type="text" id="bank_name" name="bank_name"
+                               placeholder="e.g., mBank, PKO BP"
+                               value="{{ host.bank_name or '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label for="bank_account">Bank Account (IBAN)</label>
+                        <input type="text" id="bank_account" name="bank_account"
+                               placeholder="PL 00 0000 0000 0000 0000 0000 0000"
+                               value="{{ host.bank_account or '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label for="payment_days_due">Payment Due (days)</label>
+                        <select id="payment_days_due" name="payment_days_due">
+                            <option value="0" {{ 'selected' if host.payment_days_due == 0 }}>Payment already received</option>
+                            <option value="7" {{ 'selected' if host.payment_days_due == 7 }}>7 days</option>
+                            <option value="14" {{ 'selected' if host.payment_days_due == 14 }}>14 days</option>
+                            <option value="30" {{ 'selected' if host.payment_days_due == 30 }}>30 days</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="payment_instructions">Payment Instructions</label>
+                        <textarea id="payment_instructions" name="payment_instructions" rows="3"
+                                  placeholder="e.g., Payment already settled via Booking.com">{{ host.payment_instructions or 'Payment already settled via Booking.com' }}</textarea>
+                    </div>
+                    <div class="step-actions">
+                        <button type="button" class="btn btn-secondary" onclick="goToStep(2)">Back</button>
+                        <button type="submit" class="btn btn-primary">Continue</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Step 4: Complete -->
+            <div class="wizard-step hidden" id="step-4">
+                <div class="step-header complete">
+                    <div class="success-icon">
+                        <svg viewBox="0 0 24 24" width="64" height="64">
+                            <circle cx="12" cy="12" r="11" fill="#10B981"/>
+                            <path d="M9 12l2 2 4-4" stroke="white" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                    <h2>You're All Set!</h2>
+                    <p>Your account is ready. Start by adding your first reservation.</p>
+                </div>
+                <form id="form-step-4" action="{{ url_for('admin_onboarding_save') }}" method="POST">
+                    <input type="hidden" name="step" value="4">
+                    <div class="step-actions center">
+                        <button type="submit" class="btn btn-primary btn-lg">Go to Dashboard</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .onboarding-page {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #3B82F6 0%, #1E40AF 50%, #1E3A8A 100%);
+            padding: 20px;
+        }
+
+        .onboarding-container {
+            width: 100%;
+            max-width: 540px;
+        }
+
+        .onboarding-card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15);
+            padding: 2rem;
+            animation: cardFadeIn 0.5s ease-out;
+        }
+
+        /* Progress bar */
+        .progress-bar {
+            margin-bottom: 2rem;
+        }
+
+        .progress-steps {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .step-number {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: #E5E7EB;
+            color: #9CA3AF;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .step.active .step-number,
+        .step.completed .step-number {
+            background: #3B82F6;
+            color: white;
+        }
+
+        .step.completed .step-number {
+            background: #10B981;
+        }
+
+        .step-label {
+            font-size: 0.75rem;
+            color: #9CA3AF;
+            margin-top: 0.5rem;
+            font-weight: 500;
+        }
+
+        .step.active .step-label {
+            color: #3B82F6;
+        }
+
+        .step.completed .step-label {
+            color: #10B981;
+        }
+
+        .step-line {
+            flex: 1;
+            height: 2px;
+            background: #E5E7EB;
+            margin: 0 0.5rem;
+            margin-bottom: 1.5rem;
+            transition: background 0.3s ease;
+        }
+
+        .step-line.completed {
+            background: #10B981;
+        }
+
+        /* Wizard steps */
+        .wizard-step {
+            animation: fadeIn 0.3s ease;
+        }
+
+        .wizard-step.hidden {
+            display: none;
+        }
+
+        .step-header {
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .step-header h2 {
+            font-family: 'Poppins', sans-serif;
+            font-size: 1.5rem;
+            color: #1F2937;
+            margin-bottom: 0.5rem;
+        }
+
+        .step-header p {
+            color: #6B7280;
+            font-size: 0.95rem;
+        }
+
+        .step-header.complete {
+            padding: 1rem 0;
+        }
+
+        .success-icon {
+            margin-bottom: 1rem;
+        }
+
+        /* Form elements */
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: #374151;
+            margin-bottom: 0.5rem;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            font-size: 0.95rem;
+            border: 2px solid #E5E7EB;
+            border-radius: 10px;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            font-family: inherit;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            border-color: #3B82F6;
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
+            outline: none;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        /* Radio group */
+        .radio-group {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .radio-option {
+            flex: 1;
+            cursor: pointer;
+        }
+
+        .radio-option input {
+            display: none;
+        }
+
+        .radio-label {
+            display: block;
+            padding: 1rem;
+            border: 2px solid #E5E7EB;
+            border-radius: 10px;
+            text-align: center;
+            transition: all 0.2s ease;
+        }
+
+        .radio-option input:checked + .radio-label {
+            border-color: #3B82F6;
+            background: #EFF6FF;
+        }
+
+        .radio-label strong {
+            display: block;
+            color: #1F2937;
+        }
+
+        .radio-label small {
+            color: #6B7280;
+            font-size: 0.8rem;
+        }
+
+        /* Step actions */
+        .step-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        .step-actions.center {
+            justify-content: center;
+        }
+
+        .step-actions .btn {
+            flex: 1;
+            padding: 0.85rem 1.5rem;
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
+            color: white;
+            border: none;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+        }
+
+        .btn-secondary {
+            background: white;
+            color: #6B7280;
+            border: 2px solid #E5E7EB;
+        }
+
+        .btn-secondary:hover {
+            border-color: #D1D5DB;
+            background: #F9FAFB;
+        }
+
+        .btn-lg {
+            padding: 1rem 2rem;
+            font-size: 1.1rem;
+        }
+
+        .opt {
+            color: #9CA3AF;
+            font-weight: 400;
+            font-size: 0.8rem;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @media (max-width: 640px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            .radio-group {
+                flex-direction: column;
+            }
+            .step-label {
+                display: none;
+            }
+        }
+    </style>
+
+    <script>
+        let currentStep = 1;
+
+        function goToStep(step) {
+            // Hide current step
+            document.getElementById(`step-${currentStep}`).classList.add('hidden');
+
+            // Show new step
+            document.getElementById(`step-${step}`).classList.remove('hidden');
+
+            // Update progress
+            updateProgress(step);
+
+            currentStep = step;
+        }
+
+        function updateProgress(step) {
+            document.querySelectorAll('.progress-steps .step').forEach((el, i) => {
+                const stepNum = i + 1;
+                el.classList.remove('active', 'completed');
+
+                if (stepNum < step) {
+                    el.classList.add('completed');
+                } else if (stepNum === step) {
+                    el.classList.add('active');
+                }
+            });
+
+            // Update lines
+            document.querySelectorAll('.step-line').forEach((el, i) => {
+                if (i < step - 1) {
+                    el.classList.add('completed');
+                } else {
+                    el.classList.remove('completed');
+                }
+            });
+        }
+
+        // Handle form submissions
+        document.querySelectorAll('form[id^="form-step-"]').forEach(form => {
+            if (form.id !== 'form-step-4') {
+                form.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+
+                    const formData = new FormData(form);
+                    const btn = form.querySelector('button[type="submit"]');
+                    btn.disabled = true;
+                    btn.textContent = 'Saving...';
+
+                    try {
+                        const response = await fetch('{{ url_for("admin_onboarding_save") }}', {
+                            method: 'POST',
+                            body: formData
+                        });
+
+                        const data = await response.json();
+
+                        if (data.success) {
+                            goToStep(data.next_step);
+                        }
+                    } catch (error) {
+                        console.error('Error:', error);
+                        alert('Something went wrong. Please try again.');
+                    }
+
+                    btn.disabled = false;
+                    btn.textContent = 'Continue';
+                });
+            }
+        });
+    </script>
+</body>
+</html>
