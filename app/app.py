@@ -1578,6 +1578,35 @@ def create_invoice_correction(reservation_id):
     return jsonify({'success': True, 'reservation': dict(updated), 'version': new_version})
 
 
+# ============== TEMP ADMIN ==============
+
+@app.route('/api/admin/delete-unverified-user')
+def admin_delete_unverified_user():
+    """Temporary endpoint to delete unverified users."""
+    email = request.args.get('email', '').strip().lower()
+    key = request.args.get('key', '')
+
+    if key != 'temp_admin_key_2026_delete':
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    if not email:
+        return jsonify({'error': 'Email required'}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    if DB_TYPE == 'postgresql':
+        cursor.execute('DELETE FROM hosts WHERE LOWER(email) = %s AND email_verified = FALSE', (email,))
+    else:
+        cursor.execute('DELETE FROM hosts WHERE LOWER(email) = ? AND email_verified = 0', (email,))
+
+    deleted = cursor.rowcount
+    conn.commit()
+    conn.close()
+
+    return jsonify({'success': True, 'deleted': deleted, 'email': email})
+
+
 # ============== MAIN ==============
 
 if __name__ == '__main__':
