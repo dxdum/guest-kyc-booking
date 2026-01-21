@@ -481,13 +481,15 @@ body {
     visibility: hidden;
     transform: translateY(-10px);
     transition: all 0.2s ease;
-    z-index: 100;
+    z-index: 1000;
+    pointer-events: none;
 }
 
 .account-dropdown.open .account-menu {
     opacity: 1;
     visibility: visible;
     transform: translateY(0);
+    pointer-events: auto;
 }
 
 .account-menu-header {
@@ -532,6 +534,7 @@ body {
     text-decoration: none;
     font-size: 0.9rem;
     transition: all 0.15s ease;
+    cursor: pointer;
 }
 
 .account-menu-item:hover {
