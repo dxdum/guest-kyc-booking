@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Your Email - Guest Check-in System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="login-page">
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-header">
+                <div class="verify-icon">
+                    <svg viewBox="0 0 24 24" width="48" height="48">
+                        <path fill="#3B82F6" d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+                    </svg>
+                </div>
+                <h1>Check Your Email</h1>
+                <p>We've sent a verification link to:</p>
+                <p class="email-address">{{ email }}</p>
+            </div>
+
+            <div class="verify-instructions">
+                <p>Click the link in your email to verify your account and complete registration.</p>
+                <p class="hint">The link will expire in 24 hours.</p>
+            </div>
+
+            {% if verification_url %}
+            <div class="dev-mode-notice">
+                <p><strong>Didn't receive the email?</strong></p>
+                <p>Check your spam folder, or click below to verify directly:</p>
+                <a href="{{ verification_url }}" class="btn btn-primary btn-full">Verify Email Now</a>
+            </div>
+            {% endif %}
+
+            <div class="login-footer">
+                <p>Didn't receive the email? <a href="{{ url_for('resend_verification', email=email) }}">Resend</a></p>
+                <p><a href="{{ url_for('register') }}">Use a different email</a></p>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .verify-icon {
+            margin-bottom: 1rem;
+        }
+        .email-address {
+            font-weight: 600;
+            color: #1f2937;
+            font-size: 1.1rem;
+            margin-top: 0.5rem;
+        }
+        .verify-instructions {
+            background: #F3F4F6;
+            padding: 1.25rem;
+            border-radius: 10px;
+            margin: 1.5rem 0;
+            text-align: center;
+        }
+        .verify-instructions p {
+            margin: 0;
+            color: #4B5563;
+            font-size: 0.95rem;
+        }
+        .verify-instructions .hint {
+            margin-top: 0.5rem;
+            font-size: 0.85rem;
+            color: #6B7280;
+        }
+        .dev-mode-notice {
+            background: #FEF3C7;
+            border: 1px solid #F59E0B;
+            padding: 1.25rem;
+            border-radius: 10px;
+            margin: 1.5rem 0;
+            text-align: center;
+        }
+        .dev-mode-notice p {
+            margin: 0 0 0.75rem 0;
+            font-size: 0.9rem;
+            color: #92400E;
+        }
+        .login-footer {
+            margin-top: 1.5rem;
+        }
+        .login-footer p {
+            margin: 0.5rem 0;
+        }
+    </style>
+</body>
+</html>

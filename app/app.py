@@ -1,68 +1,73 @@
 """
 Guest Check-in & Invoice Collection System - Flask Backend
-A demo application for managing guest reservations and collecting invoice details.
+Multi-tenant application for managing guest reservations and collecting invoice details.
 """
 
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, Response
-import sqlite3
 from datetime import datetime, timedelta
 from functools import wraps
+from werkzeug.security import generate_password_hash, check_password_hash
 import os
 import csv
 import io
-import random
+import json
+import secrets
+import uuid
+
+from database import (
+    get_db, get_building_codes, generate_apartment_code,
+    DB_TYPE, placeholder, placeholders, init_db, seed_demo_data
+)
+from email_service import send_verification_email
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'demo-secret-key-2025')
 
-# Database path
-DB_PATH = os.path.join(os.path.dirname(__file__), 'reservations.db')
-
-# Admin credentials (from environment or defaults)
+# For backwards compatibility - demo credentials fallback
 DEMO_EMAIL = os.environ.get('ADMIN_EMAIL', 'dar.duminski@gmail.com')
 DEMO_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'pass_2912')
 
 
-def get_db():
-    """Get database connection."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def get_building_codes():
-    """Get all active building codes."""
-    conn = get_db()
-    codes = conn.execute('''
-        SELECT * FROM building_codes WHERE is_active = 1 ORDER BY display_order
-    ''').fetchall()
-    conn.close()
-    return [dict(c) for c in codes]
-
-
-def generate_apartment_code():
-    """Generate a random 6-digit apartment access code with # at end."""
-    return f"{random.randint(100000, 999999)}#"
+def get_current_host_id():
+    """Get the current logged-in host's ID from session."""
+    return session.get('host_id')
 
 
 def can_guest_edit(checkout_date_str):
     """Check if guest can still edit (more than 1 hour before checkout at 11:00)."""
-    checkout_date = datetime.strptime(checkout_date_str, '%Y-%m-%d')
-    checkout_datetime = checkout_date.replace(hour=11, minute=0, second=0)
+    if isinstance(checkout_date_str, str):
+        checkout_date = datetime.strptime(checkout_date_str, '%Y-%m-%d')
+    else:
+        checkout_date = checkout_date_str
+    checkout_datetime = datetime.combine(checkout_date, datetime.min.time()).replace(hour=11, minute=0, second=0)
     now = datetime.now()
     return now < (checkout_datetime - timedelta(hours=1))
-
-
 
 
 def login_required(f):
     """Decorator to require login for admin routes."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'logged_in' not in session:
+        if 'host_id' not in session:
             return redirect(url_for('admin_login'))
         return f(*args, **kwargs)
     return decorated_function
+
+
+def execute_query(cursor, query, params=None):
+    """Execute a query with proper placeholder substitution."""
+    if DB_TYPE == 'postgresql':
+        # PostgreSQL uses %s
+        query = query.replace('?', '%s')
+    cursor.execute(query, params or ())
+    return cursor
+
+
+def dict_row(row):
+    """Convert a database row to dictionary."""
+    if row is None:
+        return None
+    return dict(row)
 
 
 # ============== ADMIN ROUTES ==============
@@ -71,7 +76,7 @@ def login_required(f):
 @app.route('/admin/login')
 def admin_login():
     """Admin login page."""
-    if 'logged_in' in session:
+    if 'host_id' in session:
         return redirect(url_for('admin_dashboard'))
     return render_template('admin_login.html')
 
@@ -79,39 +84,448 @@ def admin_login():
 @app.route('/admin/login', methods=['POST'])
 def admin_login_post():
     """Handle admin login."""
-    email = request.form.get('email', '').strip()
+    email = request.form.get('email', '').strip().lower()
     password = request.form.get('password', '')
 
-    if email == DEMO_EMAIL and password == DEMO_PASSWORD:
-        session['logged_in'] = True
-        session['email'] = email
-        return redirect(url_for('admin_dashboard'))
+    conn = get_db()
+    if DB_TYPE == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('SELECT * FROM hosts WHERE LOWER(email) = %s', (email,))
+    else:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM hosts WHERE LOWER(email) = ?', (email,))
+
+    host = cursor.fetchone()
+    conn.close()
+
+    if host:
+        host_dict = dict(host)
+        # Check password hash
+        if host_dict.get('password_hash') and check_password_hash(host_dict['password_hash'], password):
+            # Check if email is verified
+            email_verified = host_dict.get('email_verified')
+            if DB_TYPE == 'sqlite':
+                email_verified = bool(email_verified)
+
+            if not email_verified:
+                # Redirect to verification page
+                session['pending_verification_email'] = host_dict['email']
+                session['verification_token'] = host_dict.get('email_verification_token')
+                flash('Please verify your email before logging in', 'error')
+                return redirect(url_for('verify_email_pending'))
+
+            session['host_id'] = host_dict['id']
+            session['email'] = host_dict['email']
+            session['host_name'] = host_dict.get('name') or host_dict['email'].split('@')[0]
+
+            # Update last login
+            conn = get_db()
+            cursor = conn.cursor()
+            now = datetime.now().isoformat()
+            execute_query(cursor, 'UPDATE hosts SET last_login_at = ? WHERE id = ?', (now, host_dict['id']))
+            conn.commit()
+            conn.close()
+
+            # Check if onboarding is completed
+            if not host_dict.get('onboarding_completed'):
+                return redirect(url_for('admin_onboarding'))
+
+            return redirect(url_for('admin_dashboard'))
 
     flash('Invalid email or password', 'error')
     return redirect(url_for('admin_login'))
 
 
+@app.route('/register', methods=['GET'])
+def register():
+    """Registration page."""
+    if 'host_id' in session:
+        return redirect(url_for('admin_dashboard'))
+    return render_template('register.html')
+
+
+@app.route('/register', methods=['POST'])
+def register_post():
+    """Handle new host registration."""
+    email = request.form.get('email', '').strip().lower()
+    password = request.form.get('password', '')
+    password_confirm = request.form.get('password_confirm', '')
+
+    # Validation
+    if not email or not password:
+        flash('Email and password are required', 'error')
+        return redirect(url_for('register'))
+
+    if password != password_confirm:
+        flash('Passwords do not match', 'error')
+        return redirect(url_for('register'))
+
+    if len(password) < 6:
+        flash('Password must be at least 6 characters', 'error')
+        return redirect(url_for('register'))
+
+    # Check if email already exists
+    conn = get_db()
+    if DB_TYPE == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('SELECT id, email_verified FROM hosts WHERE LOWER(email) = %s', (email,))
+    else:
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, email_verified FROM hosts WHERE LOWER(email) = ?', (email,))
+
+    existing = cursor.fetchone()
+    if existing:
+        conn.close()
+        flash('An account with this email already exists', 'error')
+        return redirect(url_for('register'))
+
+    # Generate verification token
+    verification_token = secrets.token_urlsafe(32)
+    token_expires = (datetime.now() + timedelta(hours=24)).isoformat()
+
+    # Create new host (unverified)
+    password_hash = generate_password_hash(password)
+    now = datetime.now().isoformat()
+
+    if DB_TYPE == 'postgresql':
+        cursor.execute('''
+            INSERT INTO hosts (email, password_hash, email_verified, email_verification_token,
+                              email_verification_expires, created_at, updated_at)
+            VALUES (%s, %s, FALSE, %s, %s, %s, %s)
+            RETURNING id
+        ''', (email, password_hash, verification_token, token_expires, now, now))
+        result = cursor.fetchone()
+        host_id = result['id'] if isinstance(result, dict) else result[0]
+    else:
+        cursor.execute('''
+            INSERT INTO hosts (email, password_hash, email_verified, email_verification_token,
+                              email_verification_expires, created_at, updated_at)
+            VALUES (?, ?, 0, ?, ?, ?, ?)
+        ''', (email, password_hash, verification_token, token_expires, now, now))
+        host_id = cursor.lastrowid
+
+    conn.commit()
+    conn.close()
+
+    # Generate verification URL
+    verification_url = url_for('verify_email_confirm', token=verification_token, _external=True)
+
+    # Send verification email
+    email_result = send_verification_email(email, verification_url)
+
+    # Store email in session for verification page
+    session['pending_verification_email'] = email
+    session['verification_token'] = verification_token  # Fallback for dev mode display
+    session['email_sent'] = email_result.get('success', False)
+
+    return redirect(url_for('verify_email_pending'))
+
+
+@app.route('/verify-email')
+def verify_email_pending():
+    """Show verification pending page."""
+    email = session.get('pending_verification_email')
+    token = session.get('verification_token')  # For dev mode
+
+    if not email:
+        return redirect(url_for('register'))
+
+    # Generate verification URL for dev mode display
+    verification_url = url_for('verify_email_confirm', token=token, _external=True) if token else None
+
+    return render_template('verify_email.html', email=email, verification_url=verification_url)
+
+
+@app.route('/verify-email/<token>')
+def verify_email_confirm(token):
+    """Confirm email verification."""
+    conn = get_db()
+    if DB_TYPE == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('''
+            SELECT id, email, email_verification_expires FROM hosts
+            WHERE email_verification_token = %s
+        ''', (token,))
+    else:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, email, email_verification_expires FROM hosts
+            WHERE email_verification_token = ?
+        ''', (token,))
+
+    host = cursor.fetchone()
+
+    if not host:
+        conn.close()
+        flash('Invalid or expired verification link', 'error')
+        return redirect(url_for('register'))
+
+    host_dict = dict(host)
+    expires = host_dict.get('email_verification_expires')
+
+    # Check if token expired
+    if expires:
+        expires_dt = datetime.fromisoformat(expires) if isinstance(expires, str) else expires
+        if datetime.now() > expires_dt:
+            conn.close()
+            flash('Verification link has expired. Please register again.', 'error')
+            return redirect(url_for('register'))
+
+    # Mark email as verified
+    now = datetime.now().isoformat()
+    if DB_TYPE == 'postgresql':
+        cursor.execute('''
+            UPDATE hosts SET email_verified = TRUE, email_verification_token = NULL,
+                            email_verification_expires = NULL, updated_at = %s
+            WHERE id = %s
+        ''', (now, host_dict['id']))
+    else:
+        cursor.execute('''
+            UPDATE hosts SET email_verified = 1, email_verification_token = NULL,
+                            email_verification_expires = NULL, updated_at = ?
+            WHERE id = ?
+        ''', (now, host_dict['id']))
+
+    conn.commit()
+    conn.close()
+
+    # Clear session verification data
+    session.pop('pending_verification_email', None)
+    session.pop('verification_token', None)
+
+    # Log the user in
+    session['host_id'] = host_dict['id']
+    session['email'] = host_dict['email']
+    session['host_name'] = host_dict['email'].split('@')[0]
+
+    flash('Email verified successfully! Complete your account setup.', 'success')
+    return redirect(url_for('admin_onboarding'))
+
+
+@app.route('/resend-verification')
+def resend_verification():
+    """Resend verification email."""
+    # Try to get email from query param first, then session
+    email = request.args.get('email') or session.get('pending_verification_email')
+
+    if not email:
+        flash('No pending verification found', 'error')
+        return redirect(url_for('register'))
+
+    # Verify this email exists and is not yet verified
+    conn = get_db()
+    if DB_TYPE == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('SELECT id, email_verified FROM hosts WHERE LOWER(email) = %s', (email.lower(),))
+    else:
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, email_verified FROM hosts WHERE LOWER(email) = ?', (email.lower(),))
+
+    host = cursor.fetchone()
+    if not host:
+        conn.close()
+        flash('Email not found. Please register first.', 'error')
+        return redirect(url_for('register'))
+
+    host_dict = dict(host)
+    email_verified = host_dict.get('email_verified')
+    if DB_TYPE == 'sqlite':
+        email_verified = bool(email_verified)
+
+    if email_verified:
+        conn.close()
+        flash('Email already verified. Please login.', 'success')
+        return redirect(url_for('admin_login'))
+
+    # Store in session for the verification page
+    session['pending_verification_email'] = email
+
+    # Generate new token
+    verification_token = secrets.token_urlsafe(32)
+    token_expires = (datetime.now() + timedelta(hours=24)).isoformat()
+    now = datetime.now().isoformat()
+
+    conn = get_db()
+    if DB_TYPE == 'postgresql':
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE hosts SET email_verification_token = %s,
+                            email_verification_expires = %s, updated_at = %s
+            WHERE LOWER(email) = %s
+        ''', (verification_token, token_expires, now, email))
+    else:
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE hosts SET email_verification_token = ?,
+                            email_verification_expires = ?, updated_at = ?
+            WHERE LOWER(email) = ?
+        ''', (verification_token, token_expires, now, email))
+
+    conn.commit()
+    conn.close()
+
+    # Generate verification URL and send email
+    verification_url = url_for('verify_email_confirm', token=verification_token, _external=True)
+    email_result = send_verification_email(email, verification_url)
+
+    # Update session with new token
+    session['verification_token'] = verification_token
+    session['email_sent'] = email_result.get('success', False)
+
+    if email_result.get('success'):
+        flash('Verification link resent! Check your email.', 'success')
+    else:
+        flash('Could not send email. Use the link below.', 'error')
+
+    return redirect(url_for('verify_email_pending'))
+
+
 @app.route('/admin/dashboard')
 @login_required
 def admin_dashboard():
-    """Admin dashboard - view all reservations."""
+    """Admin dashboard - view all reservations for current host."""
+    host_id = get_current_host_id()
+
     conn = get_db()
-    reservations = conn.execute('''
-        SELECT * FROM reservations
-        ORDER BY checkin_date DESC
-    ''').fetchall()
+    if DB_TYPE == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('''
+            SELECT * FROM reservations
+            WHERE host_id = %s
+            ORDER BY checkin_date DESC
+        ''', (host_id,))
+    else:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT * FROM reservations
+            WHERE host_id = ?
+            ORDER BY checkin_date DESC
+        ''', (host_id,))
+
+    reservations = cursor.fetchall()
     conn.close()
 
     # Get base URL for guest links
     base_url = request.host_url.rstrip('/')
 
-    # Get building codes
-    building_codes = get_building_codes()
+    # Get building codes for this host
+    building_codes = get_building_codes(host_id)
 
     return render_template('admin_dashboard.html',
                          reservations=reservations,
                          base_url=base_url,
                          building_codes=building_codes)
+
+
+@app.route('/admin/onboarding')
+@login_required
+def admin_onboarding():
+    """Onboarding wizard for new hosts."""
+    host_id = get_current_host_id()
+
+    # Get current host data
+    conn = get_db()
+    if DB_TYPE == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('SELECT * FROM hosts WHERE id = %s', (host_id,))
+    else:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM hosts WHERE id = ?', (host_id,))
+
+    host = cursor.fetchone()
+    conn.close()
+
+    host_dict = dict(host) if host else {}
+
+    # If onboarding already completed, redirect to dashboard
+    onboarding_completed = host_dict.get('onboarding_completed')
+    if DB_TYPE == 'sqlite':
+        onboarding_completed = bool(onboarding_completed)
+
+    if onboarding_completed:
+        return redirect(url_for('admin_dashboard'))
+
+    return render_template('onboarding.html', host=host_dict)
+
+
+@app.route('/admin/onboarding', methods=['POST'])
+@login_required
+def admin_onboarding_save():
+    """Save onboarding step data."""
+    host_id = get_current_host_id()
+    step = request.form.get('step', '1')
+
+    conn = get_db()
+    cursor = conn.cursor()
+    now = datetime.now().isoformat()
+
+    if step == '1':
+        # Profile step
+        name = request.form.get('name', '').strip()
+        phone = request.form.get('phone', '').strip()
+        business_type = request.form.get('business_type', 'individual')
+
+        execute_query(cursor, '''
+            UPDATE hosts SET name = ?, phone = ?, business_type = ?, updated_at = ?
+            WHERE id = ?
+        ''', (name, phone, business_type, now, host_id))
+
+    elif step == '2':
+        # Business details step
+        company_name = request.form.get('company_name', '').strip()
+        tax_id = request.form.get('tax_id', '').strip()
+        vat_eu = request.form.get('vat_eu', '').strip()
+        address_street = request.form.get('address_street', '').strip()
+        address_city = request.form.get('address_city', '').strip()
+        address_postal = request.form.get('address_postal', '').strip()
+        address_country = request.form.get('address_country', 'PL').strip()
+
+        execute_query(cursor, '''
+            UPDATE hosts SET company_name = ?, tax_id = ?, vat_eu = ?,
+                            address_street = ?, address_city = ?, address_postal = ?,
+                            address_country = ?, updated_at = ?
+            WHERE id = ?
+        ''', (company_name, tax_id, vat_eu, address_street, address_city,
+              address_postal, address_country, now, host_id))
+
+    elif step == '3':
+        # Invoice settings step
+        bank_name = request.form.get('bank_name', '').strip()
+        bank_account = request.form.get('bank_account', '').strip()
+        payment_days_due = request.form.get('payment_days_due', '0')
+        payment_instructions = request.form.get('payment_instructions', '').strip()
+
+        execute_query(cursor, '''
+            UPDATE hosts SET bank_name = ?, bank_account = ?,
+                            payment_days_due = ?, payment_instructions = ?, updated_at = ?
+            WHERE id = ?
+        ''', (bank_name, bank_account, int(payment_days_due), payment_instructions, now, host_id))
+
+    elif step == '4':
+        # Complete onboarding
+        execute_query(cursor, '''
+            UPDATE hosts SET onboarding_completed = ?, updated_at = ?
+            WHERE id = ?
+        ''', (True if DB_TYPE == 'postgresql' else 1, now, host_id))
+
+        conn.commit()
+        conn.close()
+
+        flash('Setup complete! Welcome to your dashboard.', 'success')
+        return redirect(url_for('admin_dashboard'))
+
+    conn.commit()
+    conn.close()
+
+    # Return next step number
+    next_step = int(step) + 1
+    return jsonify({'success': True, 'next_step': next_step})
 
 
 @app.route('/admin/logout')
@@ -127,7 +541,6 @@ def admin_logout():
 @app.route('/guest/<reservation_number>')
 def guest_form(reservation_number=None):
     """Guest form page."""
-    # Get reservation number from URL param or path
     if reservation_number is None:
         reservation_number = request.args.get('reservation')
 
@@ -135,13 +548,22 @@ def guest_form(reservation_number=None):
         return render_template('guest_form.html', error='No reservation number provided')
 
     conn = get_db()
-    reservation = conn.execute('''
-        SELECT * FROM reservations WHERE reservation_number = ?
-    ''', (reservation_number,)).fetchone()
-    conn.close()
+    if DB_TYPE == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('SELECT * FROM reservations WHERE reservation_number = %s', (reservation_number,))
+    else:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM reservations WHERE reservation_number = ?', (reservation_number,))
+
+    reservation = cursor.fetchone()
 
     if not reservation:
+        conn.close()
         return render_template('guest_form.html', error=f'Reservation "{reservation_number}" not found')
+
+    reservation = dict(reservation)
+    host_id = reservation['host_id']
 
     # Check if already submitted
     already_submitted = reservation['guest_submitted_at'] is not None
@@ -149,8 +571,10 @@ def guest_form(reservation_number=None):
     # Check if can edit (1h before checkout)
     can_edit = can_guest_edit(reservation['checkout_date'])
 
-    # Get building codes
-    building_codes = get_building_codes()
+    # Get building codes for this host
+    building_codes = get_building_codes(host_id)
+
+    conn.close()
 
     return render_template('guest_form.html',
                          reservation=reservation,
@@ -168,13 +592,22 @@ def guest_submit():
         return jsonify({'success': False, 'error': 'Missing reservation number'}), 400
 
     conn = get_db()
-    reservation = conn.execute('''
-        SELECT * FROM reservations WHERE reservation_number = ?
-    ''', (reservation_number,)).fetchone()
+    if DB_TYPE == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('SELECT * FROM reservations WHERE reservation_number = %s', (reservation_number,))
+    else:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM reservations WHERE reservation_number = ?', (reservation_number,))
+
+    reservation = cursor.fetchone()
 
     if not reservation:
         conn.close()
         return jsonify({'success': False, 'error': 'Reservation not found'}), 404
+
+    reservation = dict(reservation)
+    host_id = reservation['host_id']
 
     # Check if editing is allowed (1h before checkout)
     if reservation['guest_submitted_at'] and not can_guest_edit(reservation['checkout_date']):
@@ -216,7 +649,7 @@ def guest_submit():
     else:  # business
         company_name = request.form.get('company_name', '').strip()
         tax_id = request.form.get('tax_id', '').strip()
-        vat_eu = request.form.get('vat_eu', '').strip() or None  # Optional
+        vat_eu = request.form.get('vat_eu', '').strip() or None
 
         if not company_name:
             errors.append('Company name is required')
@@ -226,7 +659,6 @@ def guest_submit():
         first_name = None
         last_name = None
 
-    # Optional field
     special_requests = request.form.get('special_requests', '').strip() or None
 
     if errors:
@@ -235,11 +667,9 @@ def guest_submit():
 
     # Update reservation with guest data
     now = datetime.now().isoformat()
-
-    # If first submission, set guest_submitted_at
     submitted_at = reservation['guest_submitted_at'] or now
 
-    conn.execute('''
+    execute_query(cursor, '''
         UPDATE reservations SET
             invoice_type = ?,
             first_name = ?,
@@ -257,10 +687,13 @@ def guest_submit():
           address, email, special_requests, submitted_at, now, reservation_number))
     conn.commit()
 
-    # Fetch updated reservation to return access codes
-    updated = conn.execute('''
-        SELECT * FROM reservations WHERE reservation_number = ?
-    ''', (reservation_number,)).fetchone()
+    # Fetch updated reservation
+    if DB_TYPE == 'postgresql':
+        cursor.execute('SELECT * FROM reservations WHERE reservation_number = %s', (reservation_number,))
+    else:
+        cursor.execute('SELECT * FROM reservations WHERE reservation_number = ?', (reservation_number,))
+
+    updated = dict(cursor.fetchone())
     conn.close()
 
     # Build display name
@@ -270,15 +703,15 @@ def guest_submit():
         display_name = company_name
 
     # Get building codes
-    building_codes = get_building_codes()
+    building_codes = get_building_codes(host_id)
 
     return jsonify({
         'success': True,
         'building_codes': building_codes,
         'apartment_code': updated['apartment_code'],
         'room_number': updated['room_number'],
-        'checkin_date': updated['checkin_date'],
-        'checkout_date': updated['checkout_date'],
+        'checkin_date': str(updated['checkin_date']),
+        'checkout_date': str(updated['checkout_date']),
         'display_name': display_name,
         'invoice_type': invoice_type,
         'email': email,
@@ -292,9 +725,19 @@ def guest_submit():
 @app.route('/api/reservations')
 @login_required
 def api_reservations():
-    """API endpoint to get all reservations (for admin)."""
+    """API endpoint to get all reservations for current host."""
+    host_id = get_current_host_id()
+
     conn = get_db()
-    reservations = conn.execute('SELECT * FROM reservations ORDER BY checkin_date DESC').fetchall()
+    if DB_TYPE == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('SELECT * FROM reservations WHERE host_id = %s ORDER BY checkin_date DESC', (host_id,))
+    else:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM reservations WHERE host_id = ? ORDER BY checkin_date DESC', (host_id,))
+
+    reservations = cursor.fetchall()
     conn.close()
 
     return jsonify([dict(r) for r in reservations])
@@ -304,8 +747,18 @@ def api_reservations():
 @login_required
 def update_reservation(reservation_id):
     """Update a reservation (admin only)."""
+    host_id = get_current_host_id()
+
     conn = get_db()
-    reservation = conn.execute('SELECT * FROM reservations WHERE id = ?', (reservation_id,)).fetchone()
+    if DB_TYPE == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('SELECT * FROM reservations WHERE id = %s AND host_id = %s', (reservation_id, host_id))
+    else:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM reservations WHERE id = ? AND host_id = ?', (reservation_id, host_id))
+
+    reservation = cursor.fetchone()
 
     if not reservation:
         conn.close()
@@ -314,7 +767,6 @@ def update_reservation(reservation_id):
     data = request.get_json()
     now = datetime.now().isoformat()
 
-    # Build update query based on provided fields
     allowed_fields = [
         'reservation_number', 'room_number', 'apartment_code',
         'checkin_date', 'checkout_date', 'invoice_type',
@@ -339,13 +791,18 @@ def update_reservation(reservation_id):
     updates.append('updated_at = ?')
     values.append(now)
     values.append(reservation_id)
+    values.append(host_id)
 
-    query = f"UPDATE reservations SET {', '.join(updates)} WHERE id = ?"
-    conn.execute(query, values)
+    query = f"UPDATE reservations SET {', '.join(updates)} WHERE id = ? AND host_id = ?"
+    execute_query(cursor, query, values)
     conn.commit()
 
-    # Fetch updated reservation
-    updated = conn.execute('SELECT * FROM reservations WHERE id = ?', (reservation_id,)).fetchone()
+    if DB_TYPE == 'postgresql':
+        cursor.execute('SELECT * FROM reservations WHERE id = %s', (reservation_id,))
+    else:
+        cursor.execute('SELECT * FROM reservations WHERE id = ?', (reservation_id,))
+
+    updated = cursor.fetchone()
     conn.close()
 
     return jsonify({'success': True, 'reservation': dict(updated)})
@@ -355,8 +812,18 @@ def update_reservation(reservation_id):
 @login_required
 def reset_reservation(reservation_id):
     """Reset a reservation to pending state (admin testing)."""
+    host_id = get_current_host_id()
+
     conn = get_db()
-    reservation = conn.execute('SELECT * FROM reservations WHERE id = ?', (reservation_id,)).fetchone()
+    if DB_TYPE == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('SELECT * FROM reservations WHERE id = %s AND host_id = %s', (reservation_id, host_id))
+    else:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM reservations WHERE id = ? AND host_id = ?', (reservation_id, host_id))
+
+    reservation = cursor.fetchone()
 
     if not reservation:
         conn.close()
@@ -364,7 +831,7 @@ def reset_reservation(reservation_id):
 
     now = datetime.now().isoformat()
 
-    conn.execute('''
+    execute_query(cursor, '''
         UPDATE reservations SET
             invoice_type = NULL,
             first_name = NULL,
@@ -383,8 +850,8 @@ def reset_reservation(reservation_id):
             invoice_number = NULL,
             guest_submitted_at = NULL,
             updated_at = ?
-        WHERE id = ?
-    ''', (now, reservation_id))
+        WHERE id = ? AND host_id = ?
+    ''', (now, reservation_id, host_id))
     conn.commit()
     conn.close()
 
@@ -395,12 +862,24 @@ def reset_reservation(reservation_id):
 @login_required
 def generate_invoice(reservation_id):
     """Generate invoice number and mark as generated (admin only)."""
+    host_id = get_current_host_id()
+
     conn = get_db()
-    reservation = conn.execute('SELECT * FROM reservations WHERE id = ?', (reservation_id,)).fetchone()
+    if DB_TYPE == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('SELECT * FROM reservations WHERE id = %s AND host_id = %s', (reservation_id, host_id))
+    else:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM reservations WHERE id = ? AND host_id = ?', (reservation_id, host_id))
+
+    reservation = cursor.fetchone()
 
     if not reservation:
         conn.close()
         return jsonify({'success': False, 'error': 'Reservation not found'}), 404
+
+    reservation = dict(reservation)
 
     if not reservation['guest_submitted_at']:
         conn.close()
@@ -409,7 +888,6 @@ def generate_invoice(reservation_id):
     data = request.get_json() or {}
     now = datetime.now()
 
-    # Get invoice fields from request or use defaults
     service_name = data.get('service_name', reservation['service_name'] or 'Apartment Rental')
     amount_paid = data.get('amount_paid', reservation['amount_paid'])
     vat_rate = data.get('vat_rate', reservation['vat_rate'] or 8.0)
@@ -419,14 +897,12 @@ def generate_invoice(reservation_id):
         return jsonify({'success': False, 'error': 'Amount paid is required'}), 400
 
     # Calculate VAT amount
-    vat_amount = round(amount_paid * vat_rate / (100 + vat_rate), 2)
+    vat_amount = round(float(amount_paid) * float(vat_rate) / (100 + float(vat_rate)), 2)
 
-    # Generate invoice number
-    year = now.year
-    count = conn.execute('SELECT COUNT(*) FROM reservations WHERE invoice_number IS NOT NULL').fetchone()[0]
-    invoice_number = f"INV/{year}/{str(count + 1).zfill(3)}"
+    # Generate invoice number from host's pattern
+    invoice_number = generate_invoice_number_from_pattern(host_id)
 
-    conn.execute('''
+    execute_query(cursor, '''
         UPDATE reservations SET
             service_name = ?,
             amount_paid = ?,
@@ -435,11 +911,17 @@ def generate_invoice(reservation_id):
             invoice_number = ?,
             invoice_generated_at = ?,
             updated_at = ?
-        WHERE id = ?
-    ''', (service_name, amount_paid, vat_rate, vat_amount, invoice_number, now.isoformat(), now.isoformat(), reservation_id))
+        WHERE id = ? AND host_id = ?
+    ''', (service_name, amount_paid, vat_rate, vat_amount, invoice_number,
+          now.isoformat(), now.isoformat(), reservation_id, host_id))
     conn.commit()
 
-    updated = conn.execute('SELECT * FROM reservations WHERE id = ?', (reservation_id,)).fetchone()
+    if DB_TYPE == 'postgresql':
+        cursor.execute('SELECT * FROM reservations WHERE id = %s', (reservation_id,))
+    else:
+        cursor.execute('SELECT * FROM reservations WHERE id = ?', (reservation_id,))
+
+    updated = cursor.fetchone()
     conn.close()
 
     return jsonify({'success': True, 'reservation': dict(updated)})
@@ -448,16 +930,24 @@ def generate_invoice(reservation_id):
 @app.route('/api/reservations/export-csv')
 @login_required
 def export_csv():
-    """Export all reservations as CSV."""
+    """Export all reservations as CSV for current host."""
+    host_id = get_current_host_id()
+
     conn = get_db()
-    reservations = conn.execute('SELECT * FROM reservations ORDER BY checkin_date DESC').fetchall()
+    if DB_TYPE == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('SELECT * FROM reservations WHERE host_id = %s ORDER BY checkin_date DESC', (host_id,))
+    else:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM reservations WHERE host_id = ? ORDER BY checkin_date DESC', (host_id,))
+
+    reservations = cursor.fetchall()
     conn.close()
 
-    # Create CSV in memory
     output = io.StringIO()
     writer = csv.writer(output)
 
-    # Write header
     headers = [
         'ID', 'Reservation Number', 'Room', 'Apartment Code',
         'Check-in', 'Check-out', 'Invoice Type',
@@ -468,8 +958,8 @@ def export_csv():
     ]
     writer.writerow(headers)
 
-    # Write data
     for r in reservations:
+        r = dict(r)
         writer.writerow([
             r['id'], r['reservation_number'], r['room_number'], r['apartment_code'],
             r['checkin_date'], r['checkout_date'], r['invoice_type'],
@@ -493,6 +983,7 @@ def export_csv():
 @login_required
 def create_reservation():
     """Create a new reservation (admin only)."""
+    host_id = get_current_host_id()
     data = request.get_json()
     now = datetime.now().isoformat()
 
@@ -505,25 +996,40 @@ def create_reservation():
         return jsonify({'success': False, 'error': 'Missing required fields'}), 400
 
     conn = get_db()
+    if DB_TYPE == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('SELECT id FROM reservations WHERE reservation_number = %s AND host_id = %s',
+                      (reservation_number, host_id))
+    else:
+        cursor = conn.cursor()
+        cursor.execute('SELECT id FROM reservations WHERE reservation_number = ? AND host_id = ?',
+                      (reservation_number, host_id))
 
-    # Check if reservation number already exists
-    existing = conn.execute('SELECT id FROM reservations WHERE reservation_number = ?', (reservation_number,)).fetchone()
+    existing = cursor.fetchone()
     if existing:
         conn.close()
         return jsonify({'success': False, 'error': 'Reservation number already exists'}), 400
 
     apartment_code = generate_apartment_code()
 
-    conn.execute('''
+    execute_query(cursor, '''
         INSERT INTO reservations (
-            reservation_number, room_number, apartment_code,
+            host_id, reservation_number, room_number, apartment_code,
             checkin_date, checkout_date, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', (reservation_number, room_number, apartment_code, checkin_date, checkout_date, now, now))
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (host_id, reservation_number, room_number, apartment_code, checkin_date, checkout_date, now, now))
     conn.commit()
 
-    new_id = conn.execute('SELECT last_insert_rowid()').fetchone()[0]
-    reservation = conn.execute('SELECT * FROM reservations WHERE id = ?', (new_id,)).fetchone()
+    # Get the new reservation
+    if DB_TYPE == 'postgresql':
+        cursor.execute('SELECT * FROM reservations WHERE reservation_number = %s AND host_id = %s',
+                      (reservation_number, host_id))
+    else:
+        cursor.execute('SELECT * FROM reservations WHERE reservation_number = ? AND host_id = ?',
+                      (reservation_number, host_id))
+
+    reservation = cursor.fetchone()
     conn.close()
 
     return jsonify({'success': True, 'reservation': dict(reservation)}), 201
@@ -533,14 +1039,24 @@ def create_reservation():
 @login_required
 def delete_reservation(reservation_id):
     """Delete a reservation (admin only)."""
+    host_id = get_current_host_id()
+
     conn = get_db()
-    reservation = conn.execute('SELECT * FROM reservations WHERE id = ?', (reservation_id,)).fetchone()
+    if DB_TYPE == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('SELECT * FROM reservations WHERE id = %s AND host_id = %s', (reservation_id, host_id))
+    else:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM reservations WHERE id = ? AND host_id = ?', (reservation_id, host_id))
+
+    reservation = cursor.fetchone()
 
     if not reservation:
         conn.close()
         return jsonify({'success': False, 'error': 'Reservation not found'}), 404
 
-    conn.execute('DELETE FROM reservations WHERE id = ?', (reservation_id,))
+    execute_query(cursor, 'DELETE FROM reservations WHERE id = ? AND host_id = ?', (reservation_id, host_id))
     conn.commit()
     conn.close()
 
@@ -550,9 +1066,11 @@ def delete_reservation(reservation_id):
 # ============== BUILDING CODES API ==============
 
 @app.route('/api/building-codes')
+@login_required
 def api_building_codes():
-    """Get all building codes."""
-    codes = get_building_codes()
+    """Get all building codes for current host."""
+    host_id = get_current_host_id()
+    codes = get_building_codes(host_id)
     return jsonify(codes)
 
 
@@ -560,6 +1078,7 @@ def api_building_codes():
 @login_required
 def create_building_code():
     """Create a new building code (admin only)."""
+    host_id = get_current_host_id()
     data = request.get_json()
 
     name = data.get('name')
@@ -570,14 +1089,22 @@ def create_building_code():
         return jsonify({'success': False, 'error': 'Name and code are required'}), 400
 
     conn = get_db()
-    conn.execute('''
-        INSERT INTO building_codes (name, code, display_order)
-        VALUES (?, ?, ?)
-    ''', (name, code, display_order))
+    cursor = conn.cursor()
+
+    execute_query(cursor, '''
+        INSERT INTO building_codes (host_id, name, code, display_order)
+        VALUES (?, ?, ?, ?)
+    ''', (host_id, name, code, display_order))
     conn.commit()
 
-    new_id = conn.execute('SELECT last_insert_rowid()').fetchone()[0]
-    building_code = conn.execute('SELECT * FROM building_codes WHERE id = ?', (new_id,)).fetchone()
+    if DB_TYPE == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('SELECT * FROM building_codes WHERE host_id = %s ORDER BY id DESC LIMIT 1', (host_id,))
+    else:
+        cursor.execute('SELECT * FROM building_codes WHERE host_id = ? ORDER BY id DESC LIMIT 1', (host_id,))
+
+    building_code = cursor.fetchone()
     conn.close()
 
     return jsonify({'success': True, 'building_code': dict(building_code)}), 201
@@ -587,13 +1114,24 @@ def create_building_code():
 @login_required
 def update_building_code(code_id):
     """Update a building code (admin only)."""
+    host_id = get_current_host_id()
+
     conn = get_db()
-    existing = conn.execute('SELECT * FROM building_codes WHERE id = ?', (code_id,)).fetchone()
+    if DB_TYPE == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('SELECT * FROM building_codes WHERE id = %s AND host_id = %s', (code_id, host_id))
+    else:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM building_codes WHERE id = ? AND host_id = ?', (code_id, host_id))
+
+    existing = cursor.fetchone()
 
     if not existing:
         conn.close()
         return jsonify({'success': False, 'error': 'Building code not found'}), 404
 
+    existing = dict(existing)
     data = request.get_json()
 
     name = data.get('name', existing['name'])
@@ -601,13 +1139,18 @@ def update_building_code(code_id):
     display_order = data.get('display_order', existing['display_order'])
     is_active = data.get('is_active', existing['is_active'])
 
-    conn.execute('''
+    execute_query(cursor, '''
         UPDATE building_codes SET name = ?, code = ?, display_order = ?, is_active = ?
-        WHERE id = ?
-    ''', (name, code, display_order, is_active, code_id))
+        WHERE id = ? AND host_id = ?
+    ''', (name, code, display_order, is_active, code_id, host_id))
     conn.commit()
 
-    updated = conn.execute('SELECT * FROM building_codes WHERE id = ?', (code_id,)).fetchone()
+    if DB_TYPE == 'postgresql':
+        cursor.execute('SELECT * FROM building_codes WHERE id = %s', (code_id,))
+    else:
+        cursor.execute('SELECT * FROM building_codes WHERE id = ?', (code_id,))
+
+    updated = cursor.fetchone()
     conn.close()
 
     return jsonify({'success': True, 'building_code': dict(updated)})
@@ -617,14 +1160,24 @@ def update_building_code(code_id):
 @login_required
 def delete_building_code(code_id):
     """Delete a building code (admin only)."""
+    host_id = get_current_host_id()
+
     conn = get_db()
-    existing = conn.execute('SELECT * FROM building_codes WHERE id = ?', (code_id,)).fetchone()
+    if DB_TYPE == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('SELECT * FROM building_codes WHERE id = %s AND host_id = %s', (code_id, host_id))
+    else:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM building_codes WHERE id = ? AND host_id = ?', (code_id, host_id))
+
+    existing = cursor.fetchone()
 
     if not existing:
         conn.close()
         return jsonify({'success': False, 'error': 'Building code not found'}), 404
 
-    conn.execute('DELETE FROM building_codes WHERE id = ?', (code_id,))
+    execute_query(cursor, 'DELETE FROM building_codes WHERE id = ? AND host_id = ?', (code_id, host_id))
     conn.commit()
     conn.close()
 
@@ -636,66 +1189,112 @@ def delete_building_code(code_id):
 @app.route('/api/invoice-settings')
 @login_required
 def get_invoice_settings():
-    """Get invoice settings."""
+    """Get invoice settings for current host."""
+    host_id = get_current_host_id()
+
     conn = get_db()
-    settings = conn.execute('SELECT * FROM invoice_settings LIMIT 1').fetchone()
+    if DB_TYPE == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('SELECT * FROM hosts WHERE id = %s', (host_id,))
+    else:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM hosts WHERE id = ?', (host_id,))
+
+    host = cursor.fetchone()
     conn.close()
 
-    if settings:
-        return jsonify(dict(settings))
+    if host:
+        host = dict(host)
+        # Return invoice-related fields
+        return jsonify({
+            'issuer_name': host.get('company_name') or host.get('name'),
+            'issuer_address': f"{host.get('address_street', '')}, {host.get('address_postal', '')} {host.get('address_city', '')}".strip(', '),
+            'issuer_tax_id': host.get('tax_id'),
+            'issuer_vat_eu': host.get('vat_eu'),
+            'issuer_bank_name': host.get('bank_name'),
+            'issuer_bank_account': host.get('bank_account'),
+            'numbering_pattern': host.get('invoice_pattern'),
+            'rolling_number_current': host.get('invoice_rolling_number'),
+            'payment_days_due': host.get('payment_days_due'),
+            'payment_instructions': host.get('payment_instructions')
+        })
     return jsonify({})
 
 
 @app.route('/api/invoice-settings', methods=['PUT'])
 @login_required
 def update_invoice_settings():
-    """Update invoice settings."""
+    """Update invoice settings for current host."""
+    host_id = get_current_host_id()
     data = request.get_json()
-    conn = get_db()
     now = datetime.now().isoformat()
 
-    # Build update query
-    fields = [
-        'issuer_name', 'issuer_address', 'issuer_tax_id', 'issuer_vat_eu',
-        'issuer_email', 'issuer_phone', 'issuer_bank_name', 'issuer_bank_account',
-        'numbering_pattern', 'rolling_number_current', 'payment_days_due', 'payment_instructions'
-    ]
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Map old field names to new host table fields
+    field_mapping = {
+        'issuer_name': 'company_name',
+        'issuer_tax_id': 'tax_id',
+        'issuer_vat_eu': 'vat_eu',
+        'issuer_bank_name': 'bank_name',
+        'issuer_bank_account': 'bank_account',
+        'numbering_pattern': 'invoice_pattern',
+        'rolling_number_current': 'invoice_rolling_number',
+        'payment_days_due': 'payment_days_due',
+        'payment_instructions': 'payment_instructions'
+    }
 
     updates = []
     values = []
 
-    for field in fields:
-        if field in data:
-            updates.append(f'{field} = ?')
-            values.append(data[field])
+    for old_field, new_field in field_mapping.items():
+        if old_field in data:
+            updates.append(f'{new_field} = ?')
+            values.append(data[old_field])
+
+    # Handle address separately (it's split in the new schema)
+    if 'issuer_address' in data:
+        # For now, just store in address_street
+        updates.append('address_street = ?')
+        values.append(data['issuer_address'])
 
     if updates:
         updates.append('updated_at = ?')
         values.append(now)
+        values.append(host_id)
 
-        query = f"UPDATE invoice_settings SET {', '.join(updates)} WHERE id = 1"
-        conn.execute(query, values)
+        query = f"UPDATE hosts SET {', '.join(updates)} WHERE id = ?"
+        execute_query(cursor, query, values)
         conn.commit()
 
-    settings = conn.execute('SELECT * FROM invoice_settings WHERE id = 1').fetchone()
     conn.close()
 
-    return jsonify({'success': True, 'settings': dict(settings)})
+    # Return updated settings
+    return get_invoice_settings()
 
 
-def generate_invoice_number_from_pattern(preview_only=False):
-    """Generate the next invoice number based on the configured pattern.
-    If preview_only=True, don't increment the rolling number."""
+def generate_invoice_number_from_pattern(host_id, preview_only=False):
+    """Generate the next invoice number based on the host's configured pattern."""
     conn = get_db()
-    settings = conn.execute('SELECT * FROM invoice_settings LIMIT 1').fetchone()
+    if DB_TYPE == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('SELECT * FROM hosts WHERE id = %s', (host_id,))
+    else:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM hosts WHERE id = ?', (host_id,))
 
-    if not settings:
+    host = cursor.fetchone()
+
+    if not host:
         conn.close()
         return None
 
-    import json
-    pattern = json.loads(settings['numbering_pattern'] or '[]')
-    rolling_current = settings['rolling_number_current'] or 0
+    host = dict(host)
+    pattern = json.loads(host.get('invoice_pattern') or '[]')
+    rolling_current = host.get('invoice_rolling_number') or 0
 
     now = datetime.now()
     parts = []
@@ -715,8 +1314,8 @@ def generate_invoice_number_from_pattern(preview_only=False):
             format_spec = component.get('format', '000')
             new_rolling = rolling_current + 1
             if not preview_only:
-                # Update rolling number
-                conn.execute('UPDATE invoice_settings SET rolling_number_current = ? WHERE id = 1', (new_rolling,))
+                execute_query(cursor, 'UPDATE hosts SET invoice_rolling_number = ? WHERE id = ?',
+                            (new_rolling, host_id))
                 conn.commit()
             parts.append(str(new_rolling).zfill(len(format_spec)))
 
@@ -728,23 +1327,41 @@ def generate_invoice_number_from_pattern(preview_only=False):
 @login_required
 def get_next_invoice_number():
     """Get the next invoice number (preview, doesn't increment)."""
-    invoice_number = generate_invoice_number_from_pattern(preview_only=True)
+    host_id = get_current_host_id()
+    invoice_number = generate_invoice_number_from_pattern(host_id, preview_only=True)
     return jsonify({'invoice_number': invoice_number})
 
 
-def check_invoice_number_unique(invoice_number, exclude_reservation_id=None):
-    """Check if an invoice number is unique."""
+def check_invoice_number_unique(host_id, invoice_number, exclude_reservation_id=None):
+    """Check if an invoice number is unique for this host."""
     conn = get_db()
-    if exclude_reservation_id:
-        existing = conn.execute(
-            'SELECT id FROM reservations WHERE invoice_number = ? AND id != ?',
-            (invoice_number, exclude_reservation_id)
-        ).fetchone()
+    if DB_TYPE == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        if exclude_reservation_id:
+            cursor.execute(
+                'SELECT id FROM reservations WHERE invoice_number = %s AND host_id = %s AND id != %s',
+                (invoice_number, host_id, exclude_reservation_id)
+            )
+        else:
+            cursor.execute(
+                'SELECT id FROM reservations WHERE invoice_number = %s AND host_id = %s',
+                (invoice_number, host_id)
+            )
     else:
-        existing = conn.execute(
-            'SELECT id FROM reservations WHERE invoice_number = ?',
-            (invoice_number,)
-        ).fetchone()
+        cursor = conn.cursor()
+        if exclude_reservation_id:
+            cursor.execute(
+                'SELECT id FROM reservations WHERE invoice_number = ? AND host_id = ? AND id != ?',
+                (invoice_number, host_id, exclude_reservation_id)
+            )
+        else:
+            cursor.execute(
+                'SELECT id FROM reservations WHERE invoice_number = ? AND host_id = ?',
+                (invoice_number, host_id)
+            )
+
+    existing = cursor.fetchone()
     conn.close()
     return existing is None
 
@@ -755,12 +1372,36 @@ def check_invoice_number_unique(invoice_number, exclude_reservation_id=None):
 @login_required
 def get_invoice_versions(reservation_id):
     """Get all invoice versions for a reservation."""
+    host_id = get_current_host_id()
+
     conn = get_db()
-    versions = conn.execute('''
-        SELECT * FROM invoice_versions
-        WHERE reservation_id = ?
-        ORDER BY version_number ASC
-    ''', (reservation_id,)).fetchall()
+    if DB_TYPE == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        # First verify reservation belongs to this host
+        cursor.execute('SELECT id FROM reservations WHERE id = %s AND host_id = %s', (reservation_id, host_id))
+    else:
+        cursor = conn.cursor()
+        cursor.execute('SELECT id FROM reservations WHERE id = ? AND host_id = ?', (reservation_id, host_id))
+
+    if not cursor.fetchone():
+        conn.close()
+        return jsonify({'success': False, 'error': 'Reservation not found'}), 404
+
+    if DB_TYPE == 'postgresql':
+        cursor.execute('''
+            SELECT * FROM invoice_versions
+            WHERE reservation_id = %s
+            ORDER BY version_number ASC
+        ''', (reservation_id,))
+    else:
+        cursor.execute('''
+            SELECT * FROM invoice_versions
+            WHERE reservation_id = ?
+            ORDER BY version_number ASC
+        ''', (reservation_id,))
+
+    versions = cursor.fetchall()
     conn.close()
 
     return jsonify([dict(v) for v in versions])
@@ -770,12 +1411,24 @@ def get_invoice_versions(reservation_id):
 @login_required
 def create_invoice_correction(reservation_id):
     """Create an invoice correction."""
+    host_id = get_current_host_id()
+
     conn = get_db()
-    reservation = conn.execute('SELECT * FROM reservations WHERE id = ?', (reservation_id,)).fetchone()
+    if DB_TYPE == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('SELECT * FROM reservations WHERE id = %s AND host_id = %s', (reservation_id, host_id))
+    else:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM reservations WHERE id = ? AND host_id = ?', (reservation_id, host_id))
+
+    reservation = cursor.fetchone()
 
     if not reservation:
         conn.close()
         return jsonify({'success': False, 'error': 'Reservation not found'}), 404
+
+    reservation = dict(reservation)
 
     if not reservation['invoice_number']:
         conn.close()
@@ -784,13 +1437,14 @@ def create_invoice_correction(reservation_id):
     data = request.get_json() or {}
     now = datetime.now().isoformat()
 
-    import json
-
     # Get current version count
-    version_count = conn.execute(
-        'SELECT COUNT(*) FROM invoice_versions WHERE reservation_id = ?',
-        (reservation_id,)
-    ).fetchone()[0]
+    if DB_TYPE == 'postgresql':
+        cursor.execute('SELECT COUNT(*) as count FROM invoice_versions WHERE reservation_id = %s', (reservation_id,))
+    else:
+        cursor.execute('SELECT COUNT(*) FROM invoice_versions WHERE reservation_id = ?', (reservation_id,))
+
+    result = cursor.fetchone()
+    version_count = result['count'] if isinstance(result, dict) else result[0]
 
     # If no versions exist, create the original version first
     if version_count == 0:
@@ -803,18 +1457,17 @@ def create_invoice_correction(reservation_id):
             'vat_eu': reservation['vat_eu'],
             'address': reservation['address'],
             'service_name': reservation['service_name'],
-            'amount_paid': reservation['amount_paid'],
-            'vat_rate': reservation['vat_rate'],
-            'vat_amount': reservation['vat_amount'],
+            'amount_paid': float(reservation['amount_paid']) if reservation['amount_paid'] else None,
+            'vat_rate': float(reservation['vat_rate']) if reservation['vat_rate'] else None,
+            'vat_amount': float(reservation['vat_amount']) if reservation['vat_amount'] else None,
             'invoice_generated_at': reservation['invoice_generated_at']
         }
-        conn.execute('''
+        execute_query(cursor, '''
             INSERT INTO invoice_versions (reservation_id, version_number, invoice_number, invoice_data, created_at)
             VALUES (?, 1, ?, ?, ?)
         ''', (reservation_id, reservation['invoice_number'], json.dumps(original_data), now))
         version_count = 1
 
-    # Create new correction
     new_version = version_count + 1
 
     # Generate correction invoice number
@@ -825,17 +1478,15 @@ def create_invoice_correction(reservation_id):
         new_invoice_number = f"{base_number}_CORRECTED_{new_version - 1}"
 
     # Check uniqueness
-    if not check_invoice_number_unique(new_invoice_number, reservation_id):
+    if not check_invoice_number_unique(host_id, new_invoice_number, reservation_id):
         conn.close()
         return jsonify({'success': False, 'error': 'Invoice number already exists'}), 400
 
-    # Get new invoice data from request
     service_name = data.get('service_name', reservation['service_name'])
     amount_paid = data.get('amount_paid', reservation['amount_paid'])
     vat_rate = data.get('vat_rate', reservation['vat_rate'])
 
-    # Calculate VAT amount
-    vat_amount = round(amount_paid * vat_rate / (100 + vat_rate), 2) if amount_paid else 0
+    vat_amount = round(float(amount_paid) * float(vat_rate) / (100 + float(vat_rate)), 2) if amount_paid else 0
 
     correction_data = {
         'invoice_type': data.get('invoice_type', reservation['invoice_type']),
@@ -846,20 +1497,18 @@ def create_invoice_correction(reservation_id):
         'vat_eu': data.get('vat_eu', reservation['vat_eu']),
         'address': data.get('address', reservation['address']),
         'service_name': service_name,
-        'amount_paid': amount_paid,
-        'vat_rate': vat_rate,
+        'amount_paid': float(amount_paid) if amount_paid else None,
+        'vat_rate': float(vat_rate) if vat_rate else None,
         'vat_amount': vat_amount,
         'invoice_generated_at': now
     }
 
-    # Insert new version
-    conn.execute('''
+    execute_query(cursor, '''
         INSERT INTO invoice_versions (reservation_id, version_number, invoice_number, invoice_data, created_at)
         VALUES (?, ?, ?, ?, ?)
     ''', (reservation_id, new_version, new_invoice_number, json.dumps(correction_data), now))
 
-    # Update reservation with new invoice data
-    conn.execute('''
+    execute_query(cursor, '''
         UPDATE reservations SET
             invoice_type = ?,
             first_name = ?,
@@ -875,7 +1524,7 @@ def create_invoice_correction(reservation_id):
             invoice_number = ?,
             invoice_generated_at = ?,
             updated_at = ?
-        WHERE id = ?
+        WHERE id = ? AND host_id = ?
     ''', (
         correction_data['invoice_type'],
         correction_data['first_name'],
@@ -891,11 +1540,17 @@ def create_invoice_correction(reservation_id):
         new_invoice_number,
         now,
         now,
-        reservation_id
+        reservation_id,
+        host_id
     ))
     conn.commit()
 
-    updated = conn.execute('SELECT * FROM reservations WHERE id = ?', (reservation_id,)).fetchone()
+    if DB_TYPE == 'postgresql':
+        cursor.execute('SELECT * FROM reservations WHERE id = %s', (reservation_id,))
+    else:
+        cursor.execute('SELECT * FROM reservations WHERE id = ?', (reservation_id,))
+
+    updated = cursor.fetchone()
     conn.close()
 
     return jsonify({'success': True, 'reservation': dict(updated), 'version': new_version})
@@ -904,33 +1559,29 @@ def create_invoice_correction(reservation_id):
 # ============== MAIN ==============
 
 if __name__ == '__main__':
-    # Initialize database if needed
-    from database import init_db, reset_db
     import sys
 
     # Check for reset flag
     if len(sys.argv) > 1 and sys.argv[1] == '--reset':
+        from database import reset_db
         reset_db()
     else:
         init_db()
-
-    # Get building codes for display
-    codes = get_building_codes()
-    codes_display = ", ".join([f"{c['name']}: {c['code']}" for c in codes]) if codes else "None configured"
+        seed_demo_data()
 
     print("\n" + "="*60)
     print("Guest Check-in & Invoice Collection System")
     print("="*60)
+    print(f"\nDatabase: {DB_TYPE}")
     print("\nAdmin Dashboard: http://localhost:5000/admin")
     print("Demo Guest Links:")
     print("  - Pending: http://localhost:5000/guest?reservation=DEMO-001")
     print("  - Submitted: http://localhost:5000/guest?reservation=DEMO-002")
     print("  - With Invoice: http://localhost:5000/guest?reservation=DEMO-003")
     print("  - Old (14+ days): http://localhost:5000/guest?reservation=DEMO-004")
-    print("\nAdmin Credentials:")
+    print("\nDemo Host Credentials:")
     print(f"  Email: {DEMO_EMAIL}")
     print(f"  Password: {DEMO_PASSWORD}")
-    print(f"\nBuilding Codes: {codes_display}")
     print("="*60 + "\n")
 
     app.run(debug=True, port=5000)
