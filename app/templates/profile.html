@@ -40,7 +40,7 @@
                             </div>
                             <div class="form-group">
                                 <label for="surname">Last Name</label>
-                                <input type="text" id="surname" name="surname" value="{{ host.surname or '' }}" placeholder="Your last name">
+                                <input type="text" id="surname" name="surname" value="{{ host.get('surname', '') }}" placeholder="Your last name">
                             </div>
                         </div>
                         <div class="form-group">
@@ -119,10 +119,10 @@
                     </div>
                     <div class="info-item">
                         <span class="info-label">Current Plan</span>
-                        <span class="info-value plan-badge plan-{{ host.plan or 'free_trial' }}">
-                            {% if host.plan == 'standard' %}Standard
-                            {% elif host.plan == 'pro' %}Pro
-                            {% elif host.plan == 'enterprise' %}Enterprise
+                        <span class="info-value plan-badge plan-{{ host.get('plan', 'free_trial') }}">
+                            {% if host.get('plan') == 'standard' %}Standard
+                            {% elif host.get('plan') == 'pro' %}Pro
+                            {% elif host.get('plan') == 'enterprise' %}Enterprise
                             {% else %}Free Trial{% endif %}
                         </span>
                     </div>

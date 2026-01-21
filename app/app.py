@@ -627,13 +627,25 @@ def admin_profile_update():
     conn = get_db()
     cursor = conn.cursor()
 
-    execute_query(cursor, '''
-        UPDATE hosts SET name = ?, surname = ?, phone = ?, company_name = ?,
-                        tax_id = ?, vat_eu = ?, address_street = ?, address_city = ?,
-                        address_postal = ?, address_country = ?, updated_at = ?
-        WHERE id = ?
-    ''', (name, surname, phone, company_name, tax_id, vat_eu, address_street,
-          address_city, address_postal, address_country, now, host_id))
+    # Try with surname column first, fall back to without if column doesn't exist
+    try:
+        execute_query(cursor, '''
+            UPDATE hosts SET name = ?, surname = ?, phone = ?, company_name = ?,
+                            tax_id = ?, vat_eu = ?, address_street = ?, address_city = ?,
+                            address_postal = ?, address_country = ?, updated_at = ?
+            WHERE id = ?
+        ''', (name, surname, phone, company_name, tax_id, vat_eu, address_street,
+              address_city, address_postal, address_country, now, host_id))
+    except Exception:
+        # Fallback without surname if column doesn't exist
+        conn.rollback()
+        execute_query(cursor, '''
+            UPDATE hosts SET name = ?, phone = ?, company_name = ?,
+                            tax_id = ?, vat_eu = ?, address_street = ?, address_city = ?,
+                            address_postal = ?, address_country = ?, updated_at = ?
+            WHERE id = ?
+        ''', (name, phone, company_name, tax_id, vat_eu, address_street,
+              address_city, address_postal, address_country, now, host_id))
 
     conn.commit()
     conn.close()
