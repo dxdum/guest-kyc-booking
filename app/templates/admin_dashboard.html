@@ -132,31 +132,94 @@
             <!-- Reservations Section -->
             <div class="section-header">
                 <h2>Reservations</h2>
-                <span class="count">{{ reservations|length }} total</span>
+                <span class="count" id="reservation-count">{{ reservations|length }} total</span>
                 <div class="section-actions">
                     <button class="btn btn-primary btn-sm" onclick="showAddReservationModal()">+ New Reservation</button>
                     <button class="btn btn-secondary btn-sm" onclick="showCorrectionModal()">Issue Correction</button>
                     <button class="btn btn-secondary btn-sm" onclick="showInvoiceSettingsModal()">Invoice Settings</button>
+                    <button class="btn btn-secondary btn-sm" onclick="showColumnSettingsModal()">
+                        <svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align: middle; margin-right: 4px;"><path d="M3 4h18v2H3V4zm0 7h12v2H3v-2zm0 7h18v2H3v-2z" fill="currentColor"/></svg>
+                        Columns
+                    </button>
                     <a href="/api/reservations/export-csv" class="btn btn-secondary btn-sm">Export CSV</a>
                 </div>
             </div>
 
             <div class="table-container">
-                <table class="reservations-table">
+                <table class="reservations-table" id="reservations-table">
                     <thead>
-                        <tr>
-                            <th class="resizable">ID</th>
-                            <th class="resizable">Room</th>
-                            <th class="resizable">Check-in</th>
-                            <th class="resizable">Check-out</th>
-                            <th class="resizable"><span class="th-multiline">Days past<br>checkout</span></th>
-                            <th class="resizable">Apt Code</th>
-                            <th class="resizable">Type</th>
-                            <th class="resizable">Status</th>
-                            <th class="resizable">Guest Details</th>
-                            <th class="resizable">Email</th>
-                            <th class="resizable">Invoice</th>
-                            <th>Actions</th>
+                        <tr class="header-row">
+                            <th class="resizable sortable" data-col="reservation_number" data-type="string">
+                                <div class="th-content"><span>ID</span><span class="sort-icon"></span></div>
+                            </th>
+                            <th class="resizable sortable" data-col="room_number" data-type="number">
+                                <div class="th-content"><span>Room</span><span class="sort-icon"></span></div>
+                            </th>
+                            <th class="resizable sortable" data-col="checkin_date" data-type="date">
+                                <div class="th-content"><span>Check-in</span><span class="sort-icon"></span></div>
+                            </th>
+                            <th class="resizable sortable" data-col="checkout_date" data-type="date">
+                                <div class="th-content"><span>Check-out</span><span class="sort-icon"></span></div>
+                            </th>
+                            <th class="resizable sortable" data-col="days_past" data-type="number">
+                                <div class="th-content"><span class="th-multiline">Days past<br>checkout</span><span class="sort-icon"></span></div>
+                            </th>
+                            <th class="resizable sortable" data-col="apartment_code" data-type="string">
+                                <div class="th-content"><span>Apt Code</span><span class="sort-icon"></span></div>
+                            </th>
+                            <th class="resizable sortable" data-col="invoice_type" data-type="string">
+                                <div class="th-content"><span>Type</span><span class="sort-icon"></span></div>
+                            </th>
+                            <th class="resizable sortable" data-col="status" data-type="string">
+                                <div class="th-content"><span>Status</span><span class="sort-icon"></span></div>
+                            </th>
+                            <th class="resizable" data-col="guest_details">
+                                <div class="th-content"><span>Guest Details</span></div>
+                            </th>
+                            <th class="resizable sortable" data-col="email" data-type="string">
+                                <div class="th-content"><span>Email</span><span class="sort-icon"></span></div>
+                            </th>
+                            <th class="resizable sortable" data-col="invoice_number" data-type="string">
+                                <div class="th-content"><span>Invoice</span><span class="sort-icon"></span></div>
+                            </th>
+                            <th data-col="actions">Actions</th>
+                        </tr>
+                        <tr class="filter-row">
+                            <th><input type="text" class="filter-input" data-col="reservation_number" placeholder="Filter..."></th>
+                            <th><input type="text" class="filter-input" data-col="room_number" placeholder="Filter..."></th>
+                            <th><input type="date" class="filter-input" data-col="checkin_date"></th>
+                            <th><input type="date" class="filter-input" data-col="checkout_date"></th>
+                            <th>
+                                <select class="filter-input" data-col="days_past">
+                                    <option value="">All</option>
+                                    <option value="past">Past checkout</option>
+                                    <option value="today">Today</option>
+                                    <option value="future">Upcoming</option>
+                                </select>
+                            </th>
+                            <th><input type="text" class="filter-input" data-col="apartment_code" placeholder="Filter..."></th>
+                            <th>
+                                <select class="filter-input" data-col="invoice_type">
+                                    <option value="">All</option>
+                                    <option value="individual">Individual</option>
+                                    <option value="business">Business</option>
+                                    <option value="none">Not set</option>
+                                </select>
+                            </th>
+                            <th>
+                                <select class="filter-input" data-col="status">
+                                    <option value="">All</option>
+                                    <option value="pending">Pending</option>
+                                    <option value="submitted">Submitted</option>
+                                    <option value="invoiced">Invoiced</option>
+                                </select>
+                            </th>
+                            <th><input type="text" class="filter-input" data-col="guest_details" placeholder="Filter..."></th>
+                            <th><input type="text" class="filter-input" data-col="email" placeholder="Filter..."></th>
+                            <th><input type="text" class="filter-input" data-col="invoice_number" placeholder="Filter..."></th>
+                            <th><button class="btn-icon" onclick="clearAllFilters()" title="Clear filters">
+                                <svg viewBox="0 0 24 24" width="16" height="16"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/></svg>
+                            </button></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -164,30 +227,30 @@
                         {% set checkout_date = res.checkout_date %}
                         {% set today = now.strftime('%Y-%m-%d') if now else '' %}
                         <tr class="{{ 'submitted' if res.guest_submitted_at else 'pending' }}" data-id="{{ res.id }}">
-                            <td class="mono editable" data-field="reservation_number">
+                            <td class="mono editable" data-field="reservation_number" data-col="reservation_number">
                                 <span class="display-value">{{ res.reservation_number }}</span>
                                 <input type="text" class="edit-input" value="{{ res.reservation_number }}" style="display:none;">
                             </td>
-                            <td class="editable" data-field="room_number">
+                            <td class="editable" data-field="room_number" data-col="room_number">
                                 <span class="display-value">{{ res.room_number }}</span>
                                 <input type="number" class="edit-input" value="{{ res.room_number }}" min="1" style="display:none;">
                             </td>
-                            <td class="editable" data-field="checkin_date">
+                            <td class="editable" data-field="checkin_date" data-col="checkin_date">
                                 <span class="display-value">{{ res.checkin_date }}</span>
                                 <input type="date" class="edit-input" value="{{ res.checkin_date }}" style="display:none;">
                             </td>
-                            <td class="editable" data-field="checkout_date">
+                            <td class="editable" data-field="checkout_date" data-col="checkout_date">
                                 <span class="display-value">{{ res.checkout_date }}</span>
                                 <input type="date" class="edit-input" value="{{ res.checkout_date }}" style="display:none;">
                             </td>
-                            <td class="days-col">
+                            <td class="days-col" data-col="days_past">
                                 <span class="days-badge" data-checkout="{{ res.checkout_date }}"></span>
                             </td>
-                            <td class="mono access-code editable" data-field="apartment_code">
+                            <td class="mono access-code editable" data-field="apartment_code" data-col="apartment_code">
                                 <span class="display-value">{{ res.apartment_code }}</span>
                                 <input type="text" class="edit-input" value="{{ res.apartment_code }}" style="display:none;">
                             </td>
-                            <td class="editable type-col" data-field="invoice_type">
+                            <td class="editable type-col" data-field="invoice_type" data-col="invoice_type">
                                 <span class="display-value type-badge type-{{ res.invoice_type or 'none' }}">
                                     {{ 'Individual' if res.invoice_type == 'individual' else ('Business' if res.invoice_type == 'business' else '-') }}
                                 </span>
@@ -197,7 +260,7 @@
                                     <option value="business" {{ 'selected' if res.invoice_type == 'business' else '' }}>Business</option>
                                 </select>
                             </td>
-                            <td class="editable status-col" data-field="status">
+                            <td class="editable status-col" data-field="status" data-col="status">
                                 <span class="display-value status-badge status-{{ 'invoiced' if res.invoice_generated_at else ('submitted' if res.guest_submitted_at else 'pending') }}">
                                     {{ 'Invoiced' if res.invoice_generated_at else ('Submitted' if res.guest_submitted_at else 'Pending') }}
                                 </span>
@@ -207,7 +270,7 @@
                                     <option value="invoiced" {{ 'selected' if res.invoice_generated_at else '' }}>Invoiced</option>
                                 </select>
                             </td>
-                            <td class="guest-details">
+                            <td class="guest-details" data-col="guest_details">
                                 {% if res.guest_submitted_at %}
                                     <div class="guest-info">
                                         {% if res.invoice_type == 'individual' %}
@@ -226,14 +289,14 @@
                                     <span class="no-data">-</span>
                                 {% endif %}
                             </td>
-                            <td class="email-col">
+                            <td class="email-col" data-col="email">
                                 {% if res.email %}
                                     <a href="mailto:{{ res.email }}" class="email-link">{{ res.email }}</a>
                                 {% else %}
                                     <span class="no-data">-</span>
                                 {% endif %}
                             </td>
-                            <td class="invoice-col">
+                            <td class="invoice-col" data-col="invoice_number">
                                 {% if res.invoice_number %}
                                     <div class="invoice-info">
                                         <span class="invoice-num clickable" onclick="showEditInvoiceModal({{ res.id }}, '{{ res.invoice_number }}', '{{ res.service_name }}', {{ res.amount_paid or 0 }}, {{ res.vat_rate or 23 }})">
@@ -258,7 +321,7 @@
                                     <span class="no-data">-</span>
                                 {% endif %}
                             </td>
-                            <td class="actions-col">
+                            <td class="actions-col" data-col="actions">
                                 <div class="actions-menu">
                                     <button class="btn-icon" onclick="copyGuestLink('{{ res.reservation_number }}')" title="Copy Guest Link">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
@@ -295,6 +358,21 @@
 
     <!-- Toast Notification -->
     <div id="toast" class="toast">Link copied to clipboard!</div>
+
+    <!-- Column Settings Modal -->
+    <div id="column-settings-modal" class="modal">
+        <div class="modal-content" style="max-width: 450px;">
+            <h3>Column Settings</h3>
+            <p style="color: #6B7280; font-size: 13px; margin-bottom: 16px;">Drag to reorder. Uncheck to hide columns.</p>
+            <div class="column-list" id="column-list">
+                <!-- Populated by JavaScript -->
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="resetColumnSettings()">Reset to Default</button>
+                <button type="button" class="btn btn-primary" onclick="closeModal('column-settings-modal')">Done</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Add Building Code Modal -->
     <div id="add-code-modal" class="modal">
@@ -1776,6 +1854,260 @@
 
             document.getElementById('versions-modal').style.display = 'flex';
         }
+
+        // ============== COLUMN SORTING ==============
+        const COLUMN_CONFIG = [
+            { id: 'reservation_number', label: 'ID', visible: true },
+            { id: 'room_number', label: 'Room', visible: true },
+            { id: 'checkin_date', label: 'Check-in', visible: true },
+            { id: 'checkout_date', label: 'Check-out', visible: true },
+            { id: 'days_past', label: 'Days Past Checkout', visible: true },
+            { id: 'apartment_code', label: 'Apt Code', visible: true },
+            { id: 'invoice_type', label: 'Type', visible: true },
+            { id: 'status', label: 'Status', visible: true },
+            { id: 'guest_details', label: 'Guest Details', visible: true },
+            { id: 'email', label: 'Email', visible: true },
+            { id: 'invoice_number', label: 'Invoice', visible: true },
+            { id: 'actions', label: 'Actions', visible: true }
+        ];
+
+        let currentSort = { col: null, dir: null };
+        let columnSettings = JSON.parse(localStorage.getItem('columnSettings')) || [...COLUMN_CONFIG];
+
+        // Apply column visibility on load
+        function applyColumnSettings() {
+            columnSettings.forEach((col, index) => {
+                const headerCells = document.querySelectorAll(`th[data-col="${col.id}"]`);
+                const bodyCells = document.querySelectorAll(`td[data-col="${col.id}"]`);
+
+                headerCells.forEach(cell => {
+                    cell.classList.toggle('col-hidden', !col.visible);
+                    cell.style.order = index;
+                });
+                bodyCells.forEach(cell => {
+                    cell.classList.toggle('col-hidden', !col.visible);
+                });
+            });
+        }
+
+        // Sorting
+        document.querySelectorAll('.sortable').forEach(th => {
+            th.addEventListener('click', function() {
+                const col = this.dataset.col;
+                const type = this.dataset.type;
+
+                // Toggle sort direction
+                if (currentSort.col === col) {
+                    currentSort.dir = currentSort.dir === 'asc' ? 'desc' : 'asc';
+                } else {
+                    currentSort.col = col;
+                    currentSort.dir = 'asc';
+                }
+
+                // Update UI
+                document.querySelectorAll('.sortable').forEach(h => h.classList.remove('asc', 'desc'));
+                this.classList.add(currentSort.dir);
+
+                // Sort table
+                sortTable(col, type, currentSort.dir);
+            });
+        });
+
+        function sortTable(col, type, dir) {
+            const tbody = document.querySelector('#reservations-table tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+
+            rows.sort((a, b) => {
+                let aVal = getCellValue(a, col);
+                let bVal = getCellValue(b, col);
+
+                // Handle type conversion
+                if (type === 'number') {
+                    aVal = parseFloat(aVal) || 0;
+                    bVal = parseFloat(bVal) || 0;
+                } else if (type === 'date') {
+                    aVal = new Date(aVal) || new Date(0);
+                    bVal = new Date(bVal) || new Date(0);
+                }
+
+                if (aVal < bVal) return dir === 'asc' ? -1 : 1;
+                if (aVal > bVal) return dir === 'asc' ? 1 : -1;
+                return 0;
+            });
+
+            rows.forEach(row => tbody.appendChild(row));
+        }
+
+        function getCellValue(row, col) {
+            const cell = row.querySelector(`td[data-field="${col}"], td[data-col="${col}"]`);
+            if (!cell) {
+                // Handle special columns
+                if (col === 'days_past') {
+                    const badge = row.querySelector('.days-badge');
+                    return badge ? parseInt(badge.textContent) || 0 : 0;
+                }
+                if (col === 'status') {
+                    const badge = row.querySelector('.status-badge');
+                    return badge ? badge.textContent.trim() : '';
+                }
+                if (col === 'invoice_number') {
+                    const invoiceCell = row.querySelector('.invoice-col');
+                    return invoiceCell ? invoiceCell.textContent.trim() : '';
+                }
+                return '';
+            }
+            const display = cell.querySelector('.display-value');
+            return display ? display.textContent.trim() : cell.textContent.trim();
+        }
+
+        // ============== FILTERING ==============
+        document.querySelectorAll('.filter-input').forEach(input => {
+            input.addEventListener('input', applyFilters);
+            input.addEventListener('change', applyFilters);
+        });
+
+        function applyFilters() {
+            const filters = {};
+            document.querySelectorAll('.filter-input').forEach(input => {
+                if (input.value) {
+                    filters[input.dataset.col] = input.value.toLowerCase();
+                }
+            });
+
+            const tbody = document.querySelector('#reservations-table tbody');
+            const rows = tbody.querySelectorAll('tr');
+            let visibleCount = 0;
+
+            rows.forEach(row => {
+                let show = true;
+
+                for (const [col, filterVal] of Object.entries(filters)) {
+                    const cellVal = getCellValue(row, col).toLowerCase();
+
+                    // Special handling for select filters
+                    if (col === 'days_past') {
+                        const badge = row.querySelector('.days-badge');
+                        const days = parseInt(badge?.textContent) || 0;
+                        if (filterVal === 'past' && days <= 0) show = false;
+                        else if (filterVal === 'today' && badge?.textContent !== 'Today') show = false;
+                        else if (filterVal === 'future' && (days >= 0 || badge?.textContent === 'Today')) show = false;
+                    } else if (col === 'invoice_type') {
+                        if (filterVal === 'none' && cellVal !== '-') show = false;
+                        else if (filterVal !== 'none' && !cellVal.includes(filterVal)) show = false;
+                    } else if (col === 'status') {
+                        if (!cellVal.includes(filterVal)) show = false;
+                    } else if (col === 'checkin_date' || col === 'checkout_date') {
+                        if (filterVal && cellVal !== filterVal) show = false;
+                    } else {
+                        if (!cellVal.includes(filterVal)) show = false;
+                    }
+                }
+
+                row.style.display = show ? '' : 'none';
+                if (show) visibleCount++;
+            });
+
+            // Update count
+            document.getElementById('reservation-count').textContent =
+                `${visibleCount} of {{ reservations|length }} shown`;
+        }
+
+        function clearAllFilters() {
+            document.querySelectorAll('.filter-input').forEach(input => {
+                input.value = '';
+            });
+            applyFilters();
+            document.getElementById('reservation-count').textContent = '{{ reservations|length }} total';
+        }
+
+        // ============== COLUMN SETTINGS ==============
+        function showColumnSettingsModal() {
+            const list = document.getElementById('column-list');
+            list.innerHTML = columnSettings.map((col, idx) => `
+                <div class="column-item" draggable="true" data-col="${col.id}">
+                    <span class="drag-handle">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/>
+                            <circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/>
+                        </svg>
+                    </span>
+                    <input type="checkbox" id="col-${col.id}" ${col.visible ? 'checked' : ''}
+                           onchange="toggleColumn('${col.id}', this.checked)"
+                           ${col.id === 'actions' ? 'disabled' : ''}>
+                    <label for="col-${col.id}">${col.label}</label>
+                </div>
+            `).join('');
+
+            // Setup drag and drop
+            setupColumnDragDrop();
+
+            document.getElementById('column-settings-modal').style.display = 'flex';
+        }
+
+        function toggleColumn(colId, visible) {
+            const col = columnSettings.find(c => c.id === colId);
+            if (col) {
+                col.visible = visible;
+                localStorage.setItem('columnSettings', JSON.stringify(columnSettings));
+                applyColumnSettings();
+            }
+        }
+
+        function resetColumnSettings() {
+            columnSettings = [...COLUMN_CONFIG];
+            localStorage.removeItem('columnSettings');
+            applyColumnSettings();
+            showColumnSettingsModal(); // Refresh the modal
+        }
+
+        function setupColumnDragDrop() {
+            const list = document.getElementById('column-list');
+            let draggedItem = null;
+
+            list.querySelectorAll('.column-item').forEach(item => {
+                item.addEventListener('dragstart', e => {
+                    draggedItem = item;
+                    item.classList.add('dragging');
+                });
+
+                item.addEventListener('dragend', e => {
+                    item.classList.remove('dragging');
+                    draggedItem = null;
+
+                    // Update order in settings
+                    const newOrder = Array.from(list.querySelectorAll('.column-item'))
+                        .map(el => el.dataset.col);
+                    columnSettings.sort((a, b) => newOrder.indexOf(a.id) - newOrder.indexOf(b.id));
+                    localStorage.setItem('columnSettings', JSON.stringify(columnSettings));
+                    applyColumnSettings();
+                });
+
+                item.addEventListener('dragover', e => {
+                    e.preventDefault();
+                    const afterElement = getDragAfterElement(list, e.clientY);
+                    if (afterElement) {
+                        list.insertBefore(draggedItem, afterElement);
+                    } else {
+                        list.appendChild(draggedItem);
+                    }
+                });
+            });
+        }
+
+        function getDragAfterElement(container, y) {
+            const draggableElements = [...container.querySelectorAll('.column-item:not(.dragging)')];
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                }
+                return closest;
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
+
+        // Initialize column settings on load
+        applyColumnSettings();
     </script>
 
     <style>
@@ -2547,6 +2879,96 @@
             margin: 0;
             font-size: 14px;
             color: #1f2937;
+        }
+
+        /* Sortable columns */
+        .sortable { cursor: pointer; user-select: none; }
+        .sortable:hover { background: #F3F4F6; }
+        .th-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 4px;
+        }
+        .sort-icon {
+            width: 16px;
+            height: 16px;
+            opacity: 0.3;
+            flex-shrink: 0;
+        }
+        .sort-icon::after {
+            content: '⇅';
+            font-size: 12px;
+        }
+        .sortable.asc .sort-icon::after { content: '↑'; opacity: 1; }
+        .sortable.desc .sort-icon::after { content: '↓'; opacity: 1; }
+        .sortable.asc .sort-icon,
+        .sortable.desc .sort-icon { opacity: 1; color: #3B82F6; }
+
+        /* Filter row */
+        .filter-row th {
+            padding: 4px 6px;
+            background: #F9FAFB;
+            border-bottom: 2px solid #E5E7EB;
+        }
+        .filter-input {
+            width: 100%;
+            padding: 4px 8px;
+            font-size: 12px;
+            border: 1px solid #D1D5DB;
+            border-radius: 4px;
+            background: white;
+        }
+        .filter-input:focus {
+            outline: none;
+            border-color: #3B82F6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+        }
+        .filter-input::placeholder { color: #9CA3AF; }
+        .filter-row .btn-icon {
+            padding: 4px;
+            background: #FEE2E2;
+            border-radius: 4px;
+        }
+        .filter-row .btn-icon:hover { background: #FECACA; }
+
+        /* Hidden columns */
+        .col-hidden { display: none !important; }
+
+        /* Column settings modal */
+        .column-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .column-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            background: #F9FAFB;
+            border: 1px solid #E5E7EB;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            cursor: grab;
+        }
+        .column-item:active { cursor: grabbing; }
+        .column-item.dragging {
+            opacity: 0.5;
+            background: #DBEAFE;
+        }
+        .column-item .drag-handle {
+            color: #9CA3AF;
+            cursor: grab;
+        }
+        .column-item label {
+            flex: 1;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .column-item input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
         }
     </style>
 </body>
