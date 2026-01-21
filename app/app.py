@@ -1580,9 +1580,9 @@ def create_invoice_correction(reservation_id):
 
 # ============== TEMP ADMIN ==============
 
-@app.route('/api/admin/delete-unverified-user')
-def admin_delete_unverified_user():
-    """Temporary endpoint to delete unverified users."""
+@app.route('/api/admin/delete-user')
+def admin_delete_user():
+    """Temporary endpoint to delete users."""
     email = request.args.get('email', '').strip().lower()
     key = request.args.get('key', '')
 
@@ -1596,9 +1596,9 @@ def admin_delete_unverified_user():
     cursor = conn.cursor()
 
     if DB_TYPE == 'postgresql':
-        cursor.execute('DELETE FROM hosts WHERE LOWER(email) = %s AND email_verified = FALSE', (email,))
+        cursor.execute('DELETE FROM hosts WHERE LOWER(email) = %s', (email,))
     else:
-        cursor.execute('DELETE FROM hosts WHERE LOWER(email) = ? AND email_verified = 0', (email,))
+        cursor.execute('DELETE FROM hosts WHERE LOWER(email) = ?', (email,))
 
     deleted = cursor.rowcount
     conn.commit()
