@@ -128,11 +128,11 @@
                     </div>
                     <div class="info-item">
                         <span class="info-label">Member Since</span>
-                        <span class="info-value">{{ host.get('created_at', '')[:10] or 'Unknown' }}</span>
+                        <span class="info-value">{{ host.get('created_at', '')[:10] if host.get('created_at') else 'Unknown' }}</span>
                     </div>
                     <div class="info-item">
                         <span class="info-label">Last Login</span>
-                        <span class="info-value">{{ host.get('last_login_at', '')[:10] or 'Never' }}</span>
+                        <span class="info-value">{{ host.get('last_login_at', '')[:10] if host.get('last_login_at') else 'Never' }}</span>
                     </div>
                 </div>
 

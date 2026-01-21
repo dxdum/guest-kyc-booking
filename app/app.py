@@ -588,28 +588,29 @@ def admin_logout():
 @login_required
 def admin_profile():
     """User profile page."""
-    try:
-        host_id = get_current_host_id()
+    host_id = get_current_host_id()
 
-        conn = get_db()
-        if DB_TYPE == 'postgresql':
-            from psycopg2.extras import RealDictCursor
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute('SELECT * FROM hosts WHERE id = %s', (host_id,))
-        else:
-            cursor = conn.cursor()
-            cursor.execute('SELECT * FROM hosts WHERE id = ?', (host_id,))
+    conn = get_db()
+    if DB_TYPE == 'postgresql':
+        from psycopg2.extras import RealDictCursor
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute('SELECT * FROM hosts WHERE id = %s', (host_id,))
+    else:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM hosts WHERE id = ?', (host_id,))
 
-        host = cursor.fetchone()
-        conn.close()
+    host = cursor.fetchone()
+    conn.close()
 
-        host_dict = dict(host) if host else {}
-        return render_template('profile.html', host=host_dict)
-    except Exception as e:
-        import traceback
-        error_msg = f"Profile error: {str(e)}\n{traceback.format_exc()}"
-        print(error_msg)
-        return f"<pre>Error loading profile:\n{error_msg}</pre>", 500
+    host_dict = dict(host) if host else {}
+
+    # Convert datetime objects to strings for template
+    for key in ['created_at', 'updated_at', 'last_login_at', 'plan_started_at']:
+        if key in host_dict and host_dict[key] is not None:
+            if hasattr(host_dict[key], 'strftime'):
+                host_dict[key] = host_dict[key].strftime('%Y-%m-%d %H:%M:%S')
+
+    return render_template('profile.html', host=host_dict)
 
 
 @app.route('/admin/profile', methods=['POST'])
