@@ -637,9 +637,12 @@ def admin_onboarding_save():
 
 @app.route('/admin/logout')
 def admin_logout():
-    """Logout admin."""
+    """Logout admin and clear trusted browser cookie."""
     session.clear()
-    return redirect(url_for('admin_login'))
+    response = redirect(url_for('admin_login'))
+    # Clear the trusted browser cookie so next login requires verification
+    response.delete_cookie('trusted_browser')
+    return response
 
 
 # ============== PROFILE ROUTES ==============
