@@ -130,83 +130,58 @@ def admin_login_post():
         host_dict = dict(host)
         # Check password hash
         if host_dict.get('password_hash') and check_password_hash(host_dict['password_hash'], password):
-            # Check if email is verified
-            email_verified = host_dict.get('email_verified')
-            if DB_TYPE == 'sqlite':
-                email_verified = bool(email_verified)
+            # ALWAYS check for trusted browser cookie first
+            # If no valid cookie, require verification code on every login
+            import hashlib
+            trusted_token = request.cookies.get('trusted_browser')
+            expected_token = hashlib.sha256(f"{host_dict['id']}:{app.secret_key}".encode()).hexdigest()[:32]
 
-            if not email_verified:
-                # Check for trusted browser cookie
-                trusted_token = request.cookies.get('trusted_browser')
-                if trusted_token:
-                    # Verify the token
-                    import hashlib
-                    expected_token = hashlib.sha256(f"{host_dict['id']}:{app.secret_key}".encode()).hexdigest()[:32]
-                    if trusted_token == expected_token:
-                        # Browser is trusted, mark email as verified
-                        conn2 = get_db()
-                        cursor2 = conn2.cursor()
-                        now = datetime.now().isoformat()
-                        if DB_TYPE == 'postgresql':
-                            cursor2.execute('UPDATE hosts SET email_verified = TRUE, updated_at = %s WHERE id = %s', (now, host_dict['id']))
-                        else:
-                            cursor2.execute('UPDATE hosts SET email_verified = 1, updated_at = ? WHERE id = ?', (now, host_dict['id']))
-                        conn2.commit()
-                        conn2.close()
-                        # Continue to login below
-                        session['host_id'] = host_dict['id']
-                        session['email'] = host_dict['email']
-                        session['host_name'] = host_dict.get('name') or host_dict['email'].split('@')[0]
-                        if not host_dict.get('onboarding_completed'):
-                            return redirect(url_for('admin_onboarding'))
-                        return redirect(url_for('admin_dashboard'))
+            if trusted_token and trusted_token == expected_token:
+                # Browser is trusted - allow direct login
+                session['host_id'] = host_dict['id']
+                session['email'] = host_dict['email']
+                session['host_name'] = host_dict.get('name') or host_dict['email'].split('@')[0]
 
-                # Generate and send new verification code
-                verification_code = generate_verification_code()
-                code_expires = (datetime.now() + timedelta(hours=24)).isoformat()
-                now = datetime.now().isoformat()
-
+                # Update last login
                 conn2 = get_db()
                 cursor2 = conn2.cursor()
-                if DB_TYPE == 'postgresql':
-                    cursor2.execute('''
-                        UPDATE hosts SET email_verification_token = %s,
-                                        email_verification_expires = %s, updated_at = %s
-                        WHERE id = %s
-                    ''', (verification_code, code_expires, now, host_dict['id']))
-                else:
-                    cursor2.execute('''
-                        UPDATE hosts SET email_verification_token = ?,
-                                        email_verification_expires = ?, updated_at = ?
-                        WHERE id = ?
-                    ''', (verification_code, code_expires, now, host_dict['id']))
+                now = datetime.now().isoformat()
+                execute_query(cursor2, 'UPDATE hosts SET last_login_at = ? WHERE id = ?', (now, host_dict['id']))
                 conn2.commit()
                 conn2.close()
 
-                # Send the verification email
-                send_verification_email(host_dict['email'], verification_code)
+                if not host_dict.get('onboarding_completed'):
+                    return redirect(url_for('admin_onboarding'))
+                return redirect(url_for('admin_dashboard'))
 
-                # Redirect to verification page
-                session['pending_verification_email'] = host_dict['email']
-                return redirect(url_for('verify_email_pending'))
-
-            session['host_id'] = host_dict['id']
-            session['email'] = host_dict['email']
-            session['host_name'] = host_dict.get('name') or host_dict['email'].split('@')[0]
-
-            # Update last login
-            conn = get_db()
-            cursor = conn.cursor()
+            # No trusted browser - require verification code
+            verification_code = generate_verification_code()
+            code_expires = (datetime.now() + timedelta(hours=24)).isoformat()
             now = datetime.now().isoformat()
-            execute_query(cursor, 'UPDATE hosts SET last_login_at = ? WHERE id = ?', (now, host_dict['id']))
-            conn.commit()
-            conn.close()
 
-            # Check if onboarding is completed
-            if not host_dict.get('onboarding_completed'):
-                return redirect(url_for('admin_onboarding'))
+            conn2 = get_db()
+            cursor2 = conn2.cursor()
+            if DB_TYPE == 'postgresql':
+                cursor2.execute('''
+                    UPDATE hosts SET email_verification_token = %s,
+                                    email_verification_expires = %s, updated_at = %s
+                    WHERE id = %s
+                ''', (verification_code, code_expires, now, host_dict['id']))
+            else:
+                cursor2.execute('''
+                    UPDATE hosts SET email_verification_token = ?,
+                                    email_verification_expires = ?, updated_at = ?
+                    WHERE id = ?
+                ''', (verification_code, code_expires, now, host_dict['id']))
+            conn2.commit()
+            conn2.close()
 
-            return redirect(url_for('admin_dashboard'))
+            # Send the verification email
+            send_verification_email(host_dict['email'], verification_code)
+
+            # Redirect to verification page
+            session['pending_verification_email'] = host_dict['email']
+            return redirect(url_for('verify_email_pending'))
 
     flash('Invalid email or password', 'error')
     return redirect(url_for('admin_login'))
