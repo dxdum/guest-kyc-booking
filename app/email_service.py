@@ -1,53 +1,102 @@
 """
 Email service for sending verification and notification emails.
-Uses SMTP configuration from environment variables.
+Uses Gmail API with OAuth2 credentials.
+
+On Render (production): Uses GMAIL_TOKEN_JSON environment variable
+On local development: Falls back to local file path
 """
 
 import os
-import smtplib
+import json
+import base64
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-# Email configuration from environment variables
-SMTP_HOST = os.environ.get('SMTP_HOST', 'smtp.gmail.com')
-SMTP_PORT = int(os.environ.get('SMTP_PORT', '587'))
-SMTP_USER = os.environ.get('SMTP_USER', '')
-SMTP_PASSWORD = os.environ.get('SMTP_PASSWORD', '')
-SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'contact@uniko.ai')
+# Gmail API configuration
+# Production: Use GMAIL_TOKEN_JSON env var
+# Local: Fall back to file path
+GMAIL_TOKEN_PATH = r'C:\Users\dardu\gmail_token.json'
+SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'dar.duminski@gmail.com')
 SENDER_NAME = os.environ.get('SENDER_NAME', 'Guest Check-in System')
 
-# Development mode - if True, prints emails instead of sending
-DEV_MODE = os.environ.get('EMAIL_DEV_MODE', 'true').lower() == 'true'
+
+def get_gmail_credentials():
+    """
+    Get Gmail API credentials from environment variable or local file.
+
+    Returns:
+        dict: Token data for Gmail API, or None if not available
+    """
+    # First, try environment variable (for Render/production)
+    gmail_token_json = os.environ.get('GMAIL_TOKEN_JSON')
+    if gmail_token_json:
+        try:
+            token_data = json.loads(gmail_token_json)
+            print("[EMAIL] Using credentials from GMAIL_TOKEN_JSON environment variable")
+            return token_data
+        except json.JSONDecodeError as e:
+            print(f"[EMAIL ERROR] Failed to parse GMAIL_TOKEN_JSON: {e}")
+            return None
+
+    # Fall back to local file (for development)
+    if os.path.exists(GMAIL_TOKEN_PATH):
+        try:
+            with open(GMAIL_TOKEN_PATH, 'r') as f:
+                token_data = json.load(f)
+            print(f"[EMAIL] Using credentials from local file: {GMAIL_TOKEN_PATH}")
+            return token_data
+        except Exception as e:
+            print(f"[EMAIL ERROR] Failed to read {GMAIL_TOKEN_PATH}: {e}")
+            return None
+
+    print("[EMAIL ERROR] No Gmail credentials found. Set GMAIL_TOKEN_JSON env var or provide local token file.")
+    return None
+
+
+def get_gmail_service():
+    """Get authenticated Gmail API service."""
+    try:
+        from google.oauth2.credentials import Credentials
+        from googleapiclient.discovery import build
+
+        token_data = get_gmail_credentials()
+        if not token_data:
+            return None
+
+        creds = Credentials(
+            token=token_data['token'],
+            refresh_token=token_data['refresh_token'],
+            token_uri=token_data['token_uri'],
+            client_id=token_data['client_id'],
+            client_secret=token_data['client_secret'],
+            scopes=token_data['scopes']
+        )
+
+        service = build('gmail', 'v1', credentials=creds)
+        return service
+    except Exception as e:
+        print(f"[EMAIL ERROR] Failed to get Gmail service: {e}")
+        return None
 
 
 def send_email(to_email, subject, html_content, text_content=None):
     """
-    Send an email using SMTP.
+    Send an email using Gmail API.
 
     Args:
         to_email: Recipient email address
         subject: Email subject
         html_content: HTML body of the email
-        text_content: Plain text body (optional, for email clients that don't support HTML)
+        text_content: Plain text body (optional)
 
     Returns:
         dict with 'success' boolean and 'message' or 'error'
     """
-    if DEV_MODE:
-        print(f"\n{'='*60}")
-        print(f"[DEV MODE] Email would be sent:")
-        print(f"To: {to_email}")
-        print(f"From: {SENDER_NAME} <{SENDER_EMAIL}>")
-        print(f"Subject: {subject}")
-        print(f"{'='*60}")
-        print(html_content[:500] + "..." if len(html_content) > 500 else html_content)
-        print(f"{'='*60}\n")
-        return {'success': True, 'message': 'Email logged (dev mode)'}
-
-    if not SMTP_USER or not SMTP_PASSWORD:
-        return {'success': False, 'error': 'SMTP credentials not configured'}
-
     try:
+        service = get_gmail_service()
+        if not service:
+            return {'success': False, 'error': 'Gmail API not configured'}
+
         # Create message
         msg = MIMEMultipart('alternative')
         msg['Subject'] = subject
@@ -62,19 +111,19 @@ def send_email(to_email, subject, html_content, text_content=None):
         part2 = MIMEText(html_content, 'html')
         msg.attach(part2)
 
-        # Connect and send
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASSWORD)
-            server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
+        # Encode and send
+        raw_message = base64.urlsafe_b64encode(msg.as_bytes()).decode('utf-8')
 
+        service.users().messages().send(
+            userId='me',
+            body={'raw': raw_message}
+        ).execute()
+
+        print(f"[EMAIL SENT] To: {to_email}, Subject: {subject}")
         return {'success': True, 'message': 'Email sent successfully'}
 
-    except smtplib.SMTPAuthenticationError:
-        return {'success': False, 'error': 'SMTP authentication failed'}
-    except smtplib.SMTPException as e:
-        return {'success': False, 'error': f'SMTP error: {str(e)}'}
     except Exception as e:
+        print(f"[EMAIL ERROR] {e}")
         return {'success': False, 'error': f'Email error: {str(e)}'}
 
 
