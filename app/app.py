@@ -118,10 +118,58 @@ def admin_login_post():
                 email_verified = bool(email_verified)
 
             if not email_verified:
+                # Check for trusted browser cookie
+                trusted_token = request.cookies.get('trusted_browser')
+                if trusted_token:
+                    # Verify the token
+                    import hashlib
+                    expected_token = hashlib.sha256(f"{host_dict['id']}:{app.secret_key}".encode()).hexdigest()[:32]
+                    if trusted_token == expected_token:
+                        # Browser is trusted, mark email as verified
+                        conn2 = get_db()
+                        cursor2 = conn2.cursor()
+                        now = datetime.now().isoformat()
+                        if DB_TYPE == 'postgresql':
+                            cursor2.execute('UPDATE hosts SET email_verified = TRUE, updated_at = %s WHERE id = %s', (now, host_dict['id']))
+                        else:
+                            cursor2.execute('UPDATE hosts SET email_verified = 1, updated_at = ? WHERE id = ?', (now, host_dict['id']))
+                        conn2.commit()
+                        conn2.close()
+                        # Continue to login below
+                        session['host_id'] = host_dict['id']
+                        session['email'] = host_dict['email']
+                        session['host_name'] = host_dict.get('name') or host_dict['email'].split('@')[0]
+                        if not host_dict.get('onboarding_completed'):
+                            return redirect(url_for('admin_onboarding'))
+                        return redirect(url_for('admin_dashboard'))
+
+                # Generate and send new verification code
+                verification_code = generate_verification_code()
+                code_expires = (datetime.now() + timedelta(hours=24)).isoformat()
+                now = datetime.now().isoformat()
+
+                conn2 = get_db()
+                cursor2 = conn2.cursor()
+                if DB_TYPE == 'postgresql':
+                    cursor2.execute('''
+                        UPDATE hosts SET email_verification_token = %s,
+                                        email_verification_expires = %s, updated_at = %s
+                        WHERE id = %s
+                    ''', (verification_code, code_expires, now, host_dict['id']))
+                else:
+                    cursor2.execute('''
+                        UPDATE hosts SET email_verification_token = ?,
+                                        email_verification_expires = ?, updated_at = ?
+                        WHERE id = ?
+                    ''', (verification_code, code_expires, now, host_dict['id']))
+                conn2.commit()
+                conn2.close()
+
+                # Send the verification email
+                send_verification_email(host_dict['email'], verification_code)
+
                 # Redirect to verification page
                 session['pending_verification_email'] = host_dict['email']
-                session['verification_token'] = host_dict.get('email_verification_token')
-                flash('Please verify your email before logging in', 'error')
                 return redirect(url_for('verify_email_pending'))
 
             session['host_id'] = host_dict['id']
@@ -324,7 +372,26 @@ def verify_email_code():
     session['email'] = host_dict['email']
     session['host_name'] = host_dict['email'].split('@')[0]
 
-    return redirect(url_for('admin_onboarding'))
+    # Create response for redirect
+    from flask import make_response
+    response = make_response(redirect(url_for('admin_onboarding')))
+
+    # Check if user wants to trust this browser
+    trust_browser = request.form.get('trust_browser')
+    if trust_browser:
+        import hashlib
+        # Create a signed token for this host
+        token = hashlib.sha256(f"{host_dict['id']}:{app.secret_key}".encode()).hexdigest()[:32]
+        # Set cookie for 90 days
+        response.set_cookie(
+            'trusted_browser',
+            token,
+            max_age=90 * 24 * 60 * 60,  # 90 days in seconds
+            httponly=True,
+            samesite='Lax'
+        )
+
+    return response
 
 
 @app.route('/resend-verification')
