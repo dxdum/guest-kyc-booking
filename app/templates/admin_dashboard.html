@@ -150,76 +150,121 @@
                     <thead>
                         <tr class="header-row">
                             <th class="resizable sortable" data-col="reservation_number" data-type="string">
-                                <div class="th-content"><span>ID</span><span class="sort-icon"></span></div>
+                                <div class="th-content">
+                                    <span>ID</span>
+                                    <span class="th-icons">
+                                        <span class="sort-icon"></span>
+                                        <span class="filter-icon" onclick="event.stopPropagation(); toggleFilter('reservation_number')" title="Filter"><svg viewBox="0 0 24 24" width="12" height="12"><path d="M3 4h18v2H3V4zm3 7h12v2H6v-2zm3 7h6v2H9v-2z" fill="currentColor"/></svg></span>
+                                    </span>
+                                </div>
+                                <div class="filter-dropdown" data-col="reservation_number"><input type="text" class="filter-input" data-col="reservation_number" placeholder="Filter ID..."></div>
                             </th>
                             <th class="resizable sortable" data-col="room_number" data-type="number">
-                                <div class="th-content"><span>Room</span><span class="sort-icon"></span></div>
+                                <div class="th-content">
+                                    <span>Room</span>
+                                    <span class="th-icons">
+                                        <span class="sort-icon"></span>
+                                        <span class="filter-icon" onclick="event.stopPropagation(); toggleFilter('room_number')" title="Filter"><svg viewBox="0 0 24 24" width="12" height="12"><path d="M3 4h18v2H3V4zm3 7h12v2H6v-2zm3 7h6v2H9v-2z" fill="currentColor"/></svg></span>
+                                    </span>
+                                </div>
+                                <div class="filter-dropdown" data-col="room_number"><input type="text" class="filter-input" data-col="room_number" placeholder="Filter..."></div>
                             </th>
                             <th class="resizable sortable" data-col="checkin_date" data-type="date">
-                                <div class="th-content"><span>Check-in</span><span class="sort-icon"></span></div>
+                                <div class="th-content">
+                                    <span>Check-in</span>
+                                    <span class="th-icons">
+                                        <span class="sort-icon"></span>
+                                        <span class="filter-icon" onclick="event.stopPropagation(); toggleFilter('checkin_date')" title="Filter"><svg viewBox="0 0 24 24" width="12" height="12"><path d="M3 4h18v2H3V4zm3 7h12v2H6v-2zm3 7h6v2H9v-2z" fill="currentColor"/></svg></span>
+                                    </span>
+                                </div>
+                                <div class="filter-dropdown" data-col="checkin_date"><input type="date" class="filter-input" data-col="checkin_date"></div>
                             </th>
                             <th class="resizable sortable" data-col="checkout_date" data-type="date">
-                                <div class="th-content"><span>Check-out</span><span class="sort-icon"></span></div>
+                                <div class="th-content">
+                                    <span>Check-out</span>
+                                    <span class="th-icons">
+                                        <span class="sort-icon"></span>
+                                        <span class="filter-icon" onclick="event.stopPropagation(); toggleFilter('checkout_date')" title="Filter"><svg viewBox="0 0 24 24" width="12" height="12"><path d="M3 4h18v2H3V4zm3 7h12v2H6v-2zm3 7h6v2H9v-2z" fill="currentColor"/></svg></span>
+                                    </span>
+                                </div>
+                                <div class="filter-dropdown" data-col="checkout_date"><input type="date" class="filter-input" data-col="checkout_date"></div>
                             </th>
                             <th class="resizable sortable" data-col="days_past" data-type="number">
-                                <div class="th-content"><span class="th-multiline">Days past<br>checkout</span><span class="sort-icon"></span></div>
+                                <div class="th-content">
+                                    <span class="th-multiline">Timeline</span>
+                                    <span class="th-icons">
+                                        <span class="sort-icon"></span>
+                                        <span class="filter-icon" onclick="event.stopPropagation(); toggleFilter('days_past')" title="Filter"><svg viewBox="0 0 24 24" width="12" height="12"><path d="M3 4h18v2H3V4zm3 7h12v2H6v-2zm3 7h6v2H9v-2z" fill="currentColor"/></svg></span>
+                                    </span>
+                                </div>
+                                <div class="filter-dropdown" data-col="days_past">
+                                    <select class="filter-input" data-col="days_past"><option value="">All</option><option value="past">Past</option><option value="today">Today</option><option value="future">Upcoming</option></select>
+                                </div>
                             </th>
                             <th class="resizable sortable" data-col="apartment_code" data-type="string">
-                                <div class="th-content"><span>Apt Code</span><span class="sort-icon"></span></div>
+                                <div class="th-content">
+                                    <span>Apt Code</span>
+                                    <span class="th-icons">
+                                        <span class="sort-icon"></span>
+                                        <span class="filter-icon" onclick="event.stopPropagation(); toggleFilter('apartment_code')" title="Filter"><svg viewBox="0 0 24 24" width="12" height="12"><path d="M3 4h18v2H3V4zm3 7h12v2H6v-2zm3 7h6v2H9v-2z" fill="currentColor"/></svg></span>
+                                    </span>
+                                </div>
+                                <div class="filter-dropdown" data-col="apartment_code"><input type="text" class="filter-input" data-col="apartment_code" placeholder="Filter..."></div>
                             </th>
                             <th class="resizable sortable" data-col="invoice_type" data-type="string">
-                                <div class="th-content"><span>Type</span><span class="sort-icon"></span></div>
+                                <div class="th-content">
+                                    <span>Type</span>
+                                    <span class="th-icons">
+                                        <span class="sort-icon"></span>
+                                        <span class="filter-icon" onclick="event.stopPropagation(); toggleFilter('invoice_type')" title="Filter"><svg viewBox="0 0 24 24" width="12" height="12"><path d="M3 4h18v2H3V4zm3 7h12v2H6v-2zm3 7h6v2H9v-2z" fill="currentColor"/></svg></span>
+                                    </span>
+                                </div>
+                                <div class="filter-dropdown" data-col="invoice_type">
+                                    <select class="filter-input" data-col="invoice_type"><option value="">All</option><option value="individual">Individual</option><option value="business">Business</option><option value="none">Not set</option></select>
+                                </div>
                             </th>
                             <th class="resizable sortable" data-col="status" data-type="string">
-                                <div class="th-content"><span>Status</span><span class="sort-icon"></span></div>
+                                <div class="th-content">
+                                    <span>Status</span>
+                                    <span class="th-icons">
+                                        <span class="sort-icon"></span>
+                                        <span class="filter-icon" onclick="event.stopPropagation(); toggleFilter('status')" title="Filter"><svg viewBox="0 0 24 24" width="12" height="12"><path d="M3 4h18v2H3V4zm3 7h12v2H6v-2zm3 7h6v2H9v-2z" fill="currentColor"/></svg></span>
+                                    </span>
+                                </div>
+                                <div class="filter-dropdown" data-col="status">
+                                    <select class="filter-input" data-col="status"><option value="">All</option><option value="pending">Pending</option><option value="submitted">Submitted</option><option value="invoiced">Invoiced</option></select>
+                                </div>
                             </th>
                             <th class="resizable" data-col="guest_details">
-                                <div class="th-content"><span>Guest Details</span></div>
+                                <div class="th-content">
+                                    <span>Guest Details</span>
+                                    <span class="th-icons">
+                                        <span class="filter-icon" onclick="event.stopPropagation(); toggleFilter('guest_details')" title="Filter"><svg viewBox="0 0 24 24" width="12" height="12"><path d="M3 4h18v2H3V4zm3 7h12v2H6v-2zm3 7h6v2H9v-2z" fill="currentColor"/></svg></span>
+                                    </span>
+                                </div>
+                                <div class="filter-dropdown" data-col="guest_details"><input type="text" class="filter-input" data-col="guest_details" placeholder="Filter..."></div>
                             </th>
                             <th class="resizable sortable" data-col="email" data-type="string">
-                                <div class="th-content"><span>Email</span><span class="sort-icon"></span></div>
+                                <div class="th-content">
+                                    <span>Email</span>
+                                    <span class="th-icons">
+                                        <span class="sort-icon"></span>
+                                        <span class="filter-icon" onclick="event.stopPropagation(); toggleFilter('email')" title="Filter"><svg viewBox="0 0 24 24" width="12" height="12"><path d="M3 4h18v2H3V4zm3 7h12v2H6v-2zm3 7h6v2H9v-2z" fill="currentColor"/></svg></span>
+                                    </span>
+                                </div>
+                                <div class="filter-dropdown" data-col="email"><input type="text" class="filter-input" data-col="email" placeholder="Filter..."></div>
                             </th>
                             <th class="resizable sortable" data-col="invoice_number" data-type="string">
-                                <div class="th-content"><span>Invoice</span><span class="sort-icon"></span></div>
+                                <div class="th-content">
+                                    <span>Invoice</span>
+                                    <span class="th-icons">
+                                        <span class="sort-icon"></span>
+                                        <span class="filter-icon" onclick="event.stopPropagation(); toggleFilter('invoice_number')" title="Filter"><svg viewBox="0 0 24 24" width="12" height="12"><path d="M3 4h18v2H3V4zm3 7h12v2H6v-2zm3 7h6v2H9v-2z" fill="currentColor"/></svg></span>
+                                    </span>
+                                </div>
+                                <div class="filter-dropdown" data-col="invoice_number"><input type="text" class="filter-input" data-col="invoice_number" placeholder="Filter..."></div>
                             </th>
                             <th data-col="actions">Actions</th>
-                        </tr>
-                        <tr class="filter-row">
-                            <th><input type="text" class="filter-input" data-col="reservation_number" placeholder="Filter..."></th>
-                            <th><input type="text" class="filter-input" data-col="room_number" placeholder="Filter..."></th>
-                            <th><input type="date" class="filter-input" data-col="checkin_date"></th>
-                            <th><input type="date" class="filter-input" data-col="checkout_date"></th>
-                            <th>
-                                <select class="filter-input" data-col="days_past">
-                                    <option value="">All</option>
-                                    <option value="past">Past checkout</option>
-                                    <option value="today">Today</option>
-                                    <option value="future">Upcoming</option>
-                                </select>
-                            </th>
-                            <th><input type="text" class="filter-input" data-col="apartment_code" placeholder="Filter..."></th>
-                            <th>
-                                <select class="filter-input" data-col="invoice_type">
-                                    <option value="">All</option>
-                                    <option value="individual">Individual</option>
-                                    <option value="business">Business</option>
-                                    <option value="none">Not set</option>
-                                </select>
-                            </th>
-                            <th>
-                                <select class="filter-input" data-col="status">
-                                    <option value="">All</option>
-                                    <option value="pending">Pending</option>
-                                    <option value="submitted">Submitted</option>
-                                    <option value="invoiced">Invoiced</option>
-                                </select>
-                            </th>
-                            <th><input type="text" class="filter-input" data-col="guest_details" placeholder="Filter..."></th>
-                            <th><input type="text" class="filter-input" data-col="email" placeholder="Filter..."></th>
-                            <th><input type="text" class="filter-input" data-col="invoice_number" placeholder="Filter..."></th>
-                            <th><button class="btn-icon" onclick="clearAllFilters()" title="Clear filters">
-                                <svg viewBox="0 0 24 24" width="16" height="16"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/></svg>
-                            </button></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -712,14 +757,17 @@
                 const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
                 if (diffDays > 0) {
-                    badge.textContent = `+${diffDays}d`;
+                    badge.textContent = `${diffDays}d ago`;
                     badge.className = 'days-badge days-past';
+                    badge.title = `Checked out ${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
                 } else if (diffDays === 0) {
                     badge.textContent = 'Today';
                     badge.className = 'days-badge days-today';
+                    badge.title = 'Checkout is today';
                 } else {
-                    badge.textContent = `${Math.abs(diffDays)}d`;
+                    badge.textContent = `in ${Math.abs(diffDays)}d`;
                     badge.className = 'days-badge days-future';
+                    badge.title = `Checkout in ${Math.abs(diffDays)} day${Math.abs(diffDays) > 1 ? 's' : ''}`;
                 }
             });
         }
@@ -1861,7 +1909,7 @@
             { id: 'room_number', label: 'Room', visible: true },
             { id: 'checkin_date', label: 'Check-in', visible: true },
             { id: 'checkout_date', label: 'Check-out', visible: true },
-            { id: 'days_past', label: 'Days Past Checkout', visible: true },
+            { id: 'days_past', label: 'Timeline', visible: true },
             { id: 'apartment_code', label: 'Apt Code', visible: true },
             { id: 'invoice_type', label: 'Type', visible: true },
             { id: 'status', label: 'Status', visible: true },
@@ -1961,9 +2009,56 @@
         }
 
         // ============== FILTERING ==============
+
+        // Toggle filter dropdown visibility
+        function toggleFilter(colName) {
+            const dropdown = document.querySelector(`.filter-dropdown[data-col="${colName}"]`);
+            const icon = dropdown.previousElementSibling.querySelector('.filter-icon');
+            const wasOpen = dropdown.classList.contains('open');
+
+            // Close all other dropdowns
+            document.querySelectorAll('.filter-dropdown.open').forEach(d => {
+                d.classList.remove('open');
+            });
+
+            // Toggle this dropdown
+            if (!wasOpen) {
+                dropdown.classList.add('open');
+                // Focus the input
+                const input = dropdown.querySelector('.filter-input');
+                if (input) {
+                    setTimeout(() => input.focus(), 50);
+                }
+            }
+        }
+
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.filter-dropdown') && !e.target.closest('.filter-icon')) {
+                document.querySelectorAll('.filter-dropdown.open').forEach(d => {
+                    d.classList.remove('open');
+                });
+            }
+        });
+
+        // Update filter icons to show active state
+        function updateFilterIcons() {
+            document.querySelectorAll('.filter-input').forEach(input => {
+                const col = input.dataset.col;
+                const icon = document.querySelector(`th[data-col="${col}"] .filter-icon, th .filter-dropdown[data-col="${col}"]`)?.closest('th')?.querySelector('.filter-icon');
+                if (icon) {
+                    if (input.value) {
+                        icon.classList.add('active');
+                    } else {
+                        icon.classList.remove('active');
+                    }
+                }
+            });
+        }
+
         document.querySelectorAll('.filter-input').forEach(input => {
-            input.addEventListener('input', applyFilters);
-            input.addEventListener('change', applyFilters);
+            input.addEventListener('input', () => { applyFilters(); updateFilterIcons(); });
+            input.addEventListener('change', () => { applyFilters(); updateFilterIcons(); });
         });
 
         function applyFilters() {
@@ -2017,6 +2112,7 @@
                 input.value = '';
             });
             applyFilters();
+            updateFilterIcons();
             document.getElementById('reservation-count').textContent = '{{ reservations|length }} total';
         }
 
@@ -2416,8 +2512,68 @@
         }
 
         .reservations-table {
-            min-width: 1400px;
+            min-width: 1200px;
             width: 100%;
+        }
+
+        /* Optimized column widths */
+        .reservations-table th[data-col="reservation_number"] { width: 100px; min-width: 80px; }
+        .reservations-table th[data-col="room_number"] { width: 70px; min-width: 60px; }
+        .reservations-table th[data-col="checkin_date"],
+        .reservations-table th[data-col="checkout_date"] { width: 110px; min-width: 100px; }
+        .reservations-table th[data-col="days_past"] { width: 90px; min-width: 80px; }
+        .reservations-table th[data-col="apartment_code"] { width: 100px; min-width: 90px; }
+        .reservations-table th[data-col="invoice_type"] { width: 80px; min-width: 70px; }
+        .reservations-table th[data-col="status"] { width: 100px; min-width: 90px; }
+        .reservations-table th[data-col="guest_details"] { width: 150px; min-width: 120px; }
+        .reservations-table th[data-col="email"] { width: 150px; min-width: 120px; }
+        .reservations-table th[data-col="invoice_number"] { width: 120px; min-width: 100px; }
+        .reservations-table th[data-col="actions"] { width: 100px; min-width: 90px; }
+
+        /* Mobile responsiveness */
+        @media (max-width: 1024px) {
+            .table-container {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+            .reservations-table {
+                min-width: 900px;
+            }
+            .dashboard-main {
+                padding: 16px;
+            }
+            .section-header {
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+            .section-actions {
+                width: 100%;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+            .section-actions .btn {
+                flex: 1;
+                min-width: fit-content;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-header {
+                padding: 12px 16px;
+            }
+            .header-left h1 {
+                font-size: 1rem;
+            }
+            .account-name {
+                display: none;
+            }
+            .building-codes-section {
+                padding: 12px;
+            }
+            .codes-list {
+                flex-direction: column;
+            }
         }
 
         .building-codes-section {
@@ -2512,6 +2668,45 @@
         .days-future {
             background: #d1fae5;
             color: #065f46;
+        }
+
+        /* Alternating row colors for better readability */
+        .reservations-table tbody tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+        .reservations-table tbody tr:hover {
+            background-color: #f1f5f9;
+        }
+
+        /* Improved button contrast for accessibility */
+        .btn-secondary {
+            color: #1e40af !important;
+            border-color: #3b82f6 !important;
+            font-weight: 600;
+        }
+        .btn-secondary:hover {
+            background-color: #dbeafe !important;
+            color: #1e3a8a !important;
+        }
+
+        /* Tooltips for action icons */
+        .btn-icon[title] {
+            position: relative;
+        }
+        .btn-icon[title]:hover::after {
+            content: attr(title);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1f2937;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            white-space: nowrap;
+            z-index: 100;
+            margin-bottom: 4px;
         }
 
         .type-select, .status-select {
@@ -2893,27 +3088,86 @@
         .sort-icon {
             width: 16px;
             height: 16px;
-            opacity: 0.3;
+            opacity: 0.5;
             flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
         .sort-icon::after {
-            content: '⇅';
-            font-size: 12px;
+            content: '↕';
+            font-size: 14px;
+            font-weight: bold;
         }
-        .sortable.asc .sort-icon::after { content: '↑'; opacity: 1; }
-        .sortable.desc .sort-icon::after { content: '↓'; opacity: 1; }
+        .sortable:hover .sort-icon { opacity: 0.8; }
+        .sortable.asc .sort-icon::after { content: '▲'; font-size: 10px; }
+        .sortable.desc .sort-icon::after { content: '▼'; font-size: 10px; }
         .sortable.asc .sort-icon,
         .sortable.desc .sort-icon { opacity: 1; color: #3B82F6; }
 
-        /* Filter row */
-        .filter-row th {
-            padding: 4px 6px;
-            background: #F9FAFB;
-            border-bottom: 2px solid #E5E7EB;
+        /* Header icons container */
+        .th-icons {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            flex-shrink: 0;
         }
+
+        /* Filter icon in header */
+        .filter-icon {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border-radius: 4px;
+            opacity: 0.4;
+            transition: all 0.15s ease;
+        }
+        .filter-icon:hover {
+            opacity: 1;
+            background: #E5E7EB;
+        }
+        .filter-icon.active {
+            opacity: 1;
+            color: #3B82F6;
+            background: #DBEAFE;
+        }
+
+        /* Filter dropdown */
+        .filter-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            min-width: 150px;
+            padding: 8px;
+            background: white;
+            border: 1px solid #E5E7EB;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 100;
+            margin-top: 4px;
+            /* Animation */
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-5px);
+            transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
+        }
+        .filter-dropdown.open {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+        th {
+            position: relative;
+        }
+
+        /* Filter input inside dropdown */
         .filter-input {
             width: 100%;
-            padding: 4px 8px;
+            padding: 6px 10px;
             font-size: 12px;
             border: 1px solid #D1D5DB;
             border-radius: 4px;
@@ -2925,12 +3179,6 @@
             box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
         }
         .filter-input::placeholder { color: #9CA3AF; }
-        .filter-row .btn-icon {
-            padding: 4px;
-            background: #FEE2E2;
-            border-radius: 4px;
-        }
-        .filter-row .btn-icon:hover { background: #FECACA; }
 
         /* Hidden columns */
         .col-hidden { display: none !important; }
