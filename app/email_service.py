@@ -16,7 +16,7 @@ from email.mime.multipart import MIMEMultipart
 # Production: Use GMAIL_TOKEN_JSON env var
 # Local: Fall back to file path
 GMAIL_TOKEN_PATH = r'C:\Users\dardu\gmail_token.json'
-SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'dar.duminski@gmail.com')
+SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'contact@uniko.ai')
 SENDER_NAME = os.environ.get('SENDER_NAME', 'Guest Check-in System')
 
 
