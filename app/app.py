@@ -81,6 +81,24 @@ def dict_row(row):
 
 # ============== ADMIN ROUTES ==============
 
+@app.route('/reset-verification/<email>')
+def reset_verification(email):
+    """Temporary route to reset email verification for testing."""
+    conn = get_db()
+    cursor = conn.cursor()
+    now = datetime.now().isoformat()
+    if DB_TYPE == 'postgresql':
+        cursor.execute('UPDATE hosts SET email_verified = FALSE, updated_at = %s WHERE LOWER(email) = %s', (now, email.lower()))
+    else:
+        cursor.execute('UPDATE hosts SET email_verified = 0, updated_at = ? WHERE LOWER(email) = ?', (now, email.lower()))
+    conn.commit()
+    affected = cursor.rowcount
+    conn.close()
+    if affected > 0:
+        return f"Reset email_verified=FALSE for {email}. <a href='/admin/login'>Go to login</a>"
+    return f"No account found for {email}"
+
+
 @app.route('/admin')
 @app.route('/admin/login')
 def admin_login():
